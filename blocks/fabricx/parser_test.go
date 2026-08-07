@@ -151,6 +151,56 @@ func TestParse_ReadWrite(t *testing.T) {
 	}
 }
 
+func TestParse_ReadOnly(t *testing.T) {
+	// reads_only must surface as a read dependency, same as the read half of ReadWrite.
+	version := uint64(3)
+	tx := &applicationpb.Tx{
+		Namespaces: []*applicationpb.TxNamespace{
+			{
+				NsId:      "ns",
+				ReadsOnly: []*applicationpb.Read{{Key: []byte("k"), Version: &version}},
+			},
+		},
+	}
+	env := buildEnvelope(t, "txid-readonly", tx)
+	p := NewBlockParser(sdk.NoOpLogger{})
+
+	btx, err := p.ParseTx(env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rws := btx.NsRWS[0].RWS
+	if len(rws.Writes) != 0 {
+		t.Errorf("expected no writes for a read-only key, got %+v", rws.Writes)
+	}
+	if len(rws.Reads) != 1 || rws.Reads[0].Key != "k" || rws.Reads[0].Version == nil || rws.Reads[0].Version.BlockNum != 3 {
+		t.Errorf("unexpected reads: %+v", rws.Reads)
+	}
+}
+
+func TestParse_ReadOnlyNeverWritten(t *testing.T) {
+	// nil version (never written) must round-trip too, not just an explicit one.
+	tx := &applicationpb.Tx{
+		Namespaces: []*applicationpb.TxNamespace{
+			{
+				NsId:      "ns",
+				ReadsOnly: []*applicationpb.Read{{Key: []byte("k")}},
+			},
+		},
+	}
+	env := buildEnvelope(t, "txid-readonly-nil", tx)
+	p := NewBlockParser(sdk.NoOpLogger{})
+
+	btx, err := p.ParseTx(env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rws := btx.NsRWS[0].RWS
+	if len(rws.Reads) != 1 || rws.Reads[0].Key != "k" || rws.Reads[0].Version != nil {
+		t.Errorf("unexpected reads: %+v", rws.Reads)
+	}
+}
+
 func TestParse_ReadWriteZeroVersion(t *testing.T) {
 	// Version 0 is a valid MVCC constraint meaning "the key was first written at block 0".
 	// It must be preserved in the read, not discarded. Only nil version means "no constraint".

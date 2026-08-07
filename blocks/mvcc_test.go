@@ -99,14 +99,15 @@ func TestMVCCValidator(t *testing.T) {
 			wantByte:  statusConflict,
 		},
 		{
-			name: "key present, version nil: blind write ok (fabric-x mode)",
+			// Matches validate_reads_ns_*'s SQL: no protocol-specific leniency.
+			name: "key present, version nil: conflict (fabric-x mode too)",
 			db: mockDB{
 				ns + "/k": {BlockNum: 1, TxNum: 0},
 			},
 			monotonic: true,
 			reads:     []KVRead{{Key: "k", Version: nil}},
-			wantValid: true,
-			wantByte:  statusValid,
+			wantValid: false,
+			wantByte:  statusConflict,
 		},
 		{
 			name: "fabric mode: matching version valid",
@@ -270,6 +271,70 @@ func TestMVCCValidatorIntraBlock(t *testing.T) {
 			}
 			if !block2.Transactions[0].Valid || txFilter2[0] != statusValid {
 				t.Errorf("after second Validate: expected valid, got valid=%v status=%v", block2.Transactions[0].Valid, txFilter2[0])
+			}
+		})
+	}
+}
+
+// TestMVCCValidatorCrossBlockStaleRead: a key written for the first time in
+// block 1 must invalidate a transaction that read it as absent (Version: nil)
+// and is only validated in block 2.
+func TestMVCCValidatorCrossBlockStaleRead(t *testing.T) {
+	const ns = "ns"
+
+	for _, monotonic := range []bool{false, true} {
+		name := "fabric"
+		if monotonic {
+			name = "fabric-x"
+		}
+		t.Run(name, func(t *testing.T) {
+			db := mockDB{}
+			v := newValidator(db, monotonic)
+
+			// Block 1: tx0 blind-writes "balance" for the first time.
+			block1 := &Block{
+				Number: 1,
+				Transactions: []Transaction{
+					{
+						Number: 0,
+						NsRWS: []NsReadWriteSet{{
+							Namespace: ns,
+							RWS:       ReadWriteSet{Writes: []KVWrite{{Key: "balance", Value: []byte("10")}}},
+						}},
+					},
+				},
+			}
+			txFilter1, err := v.Validate(block1)
+			if err != nil {
+				t.Fatalf("Validate block1: %v", err)
+			}
+			if !block1.Transactions[0].Valid || txFilter1[0] != statusValid {
+				t.Fatalf("block1 tx0: expected valid, got valid=%v status=%v", block1.Transactions[0].Valid, txFilter1[0])
+			}
+			// Simulate the ledger committing tx0's write before block 2 is validated.
+			db[ns+"/balance"] = &WriteRecord{BlockNum: 1, TxNum: 0, Version: 1}
+
+			// Block 2: tx1 reads "balance" with Version: nil, exactly as recorded
+			// when it was endorsed before block 1 committed.
+			block2 := &Block{
+				Number: 2,
+				Transactions: []Transaction{
+					{
+						Number: 0,
+						NsRWS: []NsReadWriteSet{{
+							Namespace: ns,
+							RWS:       ReadWriteSet{Reads: []KVRead{{Key: "balance", Version: nil}}},
+						}},
+					},
+				},
+			}
+			txFilter2, err := v.Validate(block2)
+			if err != nil {
+				t.Fatalf("Validate block2: %v", err)
+			}
+			if block2.Transactions[0].Valid || txFilter2[0] != statusConflict {
+				t.Errorf("block2 tx1: expected conflict (stale read of key first written in block1), got valid=%v status=%v",
+					block2.Transactions[0].Valid, txFilter2[0])
 			}
 		})
 	}

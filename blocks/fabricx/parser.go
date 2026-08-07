@@ -125,6 +125,17 @@ func (BlockParser) ParseTx(env *common.Envelope) (*blocks.Transaction, error) {
 			},
 		}
 
+		for _, r := range ns.ReadsOnly {
+			read := blocks.KVRead{Key: string(r.Key)}
+			// Version nil means "no constraint" (new key / blind-write semantics).
+			// Version 0 is a valid MVCC constraint: the key was first written at block 0.
+			if r.Version != nil {
+				read.Version = &blocks.Version{
+					BlockNum: *r.Version,
+				}
+			}
+			nsrws.RWS.Reads = append(nsrws.RWS.Reads, read)
+		}
 		for _, bw := range ns.BlindWrites {
 			// All blind writes are now normal world state writes
 			// (events and inputs are in metadata)

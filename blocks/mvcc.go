@@ -113,12 +113,8 @@ func (l *MVCCValidator) checkNs(ns string, blockNum uint64, reads []KVRead) (boo
 
 		// ...but we expected none?
 		if r.Version == nil {
-			if l.monotonicVersions {
-				// In fabric-x, proto version=0 is dropped by the parser (we expect version > 0),
-				// resulting in nil. Nil means no version constraint — treat as blind write.
-				continue
-			}
-			// not ok in fabric, we expected no record to exist
+			// Conflict in both protocols — matches validate_reads_ns_*'s
+			// "actual.key IS NOT NULL AND expected.version IS NULL" case.
 			return false, l.conflict, nil
 		}
 
