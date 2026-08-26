@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/hyperledger/fabric-x-common/api/committerpb"
+	"github.com/hyperledger/fabric-x-sdk/notification"
 )
 
 func TestConvertTxEventBatch_FieldMapping(t *testing.T) {
@@ -40,12 +41,14 @@ func TestConvertTxEventBatch_FieldMapping(t *testing.T) {
 	if first.TxID != "txABC" || first.BlockNum != 42 || first.TxNum != 3 {
 		t.Errorf("first event ref mismatch: %+v", first)
 	}
-	if first.Status != committerpb.Status_COMMITTED {
-		t.Errorf("first event status: want COMMITTED, got %v", first.Status)
+	if first.Status != notification.StatusCommitted || first.Reason != "COMMITTED" ||
+		first.RawCode != int32(committerpb.Status_COMMITTED) {
+		t.Errorf("first event status: want COMMITTED, got %v (%q, code %d)", first.Status, first.Reason, first.RawCode)
 	}
 
 	second := got.Events[1]
-	if second.TxID != "txDEF" || second.TxNum != 7 || second.Status != committerpb.Status_ABORTED_MVCC_CONFLICT {
+	if second.TxID != "txDEF" || second.TxNum != 7 || second.Status != notification.StatusMVCCConflict ||
+		second.Reason != "ABORTED_MVCC_CONFLICT" || second.RawCode != int32(committerpb.Status_ABORTED_MVCC_CONFLICT) {
 		t.Errorf("second event mismatch: %+v", second)
 	}
 }

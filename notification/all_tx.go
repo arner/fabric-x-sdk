@@ -11,7 +11,6 @@ import (
 	"fmt"
 
 	"github.com/hyperledger/fabric-x-common/api/applicationpb"
-	"github.com/hyperledger/fabric-x-common/api/committerpb"
 	sdk "github.com/hyperledger/fabric-x-sdk"
 )
 
@@ -22,7 +21,9 @@ type CommittedTxEvent struct {
 	TxID         string
 	BlockNum     uint64
 	TxNum        uint32
-	Status       committerpb.Status
+	Status       Status
+	RawCode      int32
+	Reason       string
 	Namespaces   []*applicationpb.TxNamespace
 	Endorsements []*applicationpb.Endorsements
 	Metadata     [][]byte
@@ -30,7 +31,7 @@ type CommittedTxEvent struct {
 
 // Valid returns true if the transaction was committed successfully.
 func (e CommittedTxEvent) Valid() bool {
-	return e.Status == committerpb.Status_COMMITTED
+	return e.Status.Valid()
 }
 
 // AllTxBatch is a batch of transaction events from a single committed block.
@@ -42,6 +43,10 @@ type AllTxBatch struct {
 
 // AllTxHandler processes batches of committed transaction events.
 // Handlers are invoked sequentially for each block's worth of events.
+//
+// HandleBatch runs on the stream's single receive goroutine and must not block:
+// slow work stalls the loop and delays the entire committed-transaction feed.
+// Offload anything slow to your own goroutine or queue.
 type AllTxHandler interface {
 	HandleBatch(ctx context.Context, batch AllTxBatch) error
 }
@@ -60,8 +65,10 @@ type StreamAllRequest struct {
 	// the listed namespaces. Nil means no namespace filter.
 	FilterNamespaces []string
 	// FilterStatus limits events to transactions with at least one of the listed
-	// statuses. Nil means no status filter.
-	FilterStatus []committerpb.Status
+	// statuses. Nil means no status filter. Most Status values map to a single
+	// service code, but StatusMalformed is coarser: it matches every malformed-
+	// envelope variant the underlying service reports.
+	FilterStatus []Status
 	// IncludeReadWriteSets requests that Namespaces (read/write sets) be populated
 	// on each CommittedTxEvent.
 	IncludeReadWriteSets bool
