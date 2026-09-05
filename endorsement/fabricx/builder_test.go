@@ -104,6 +104,50 @@ func TestEndorse_Delete(t *testing.T) {
 	}
 }
 
+// TestEndorse_MetadataFixedWidth guards against a regression where metadata
+// entries were only conditionally appended: an empty Args with a non-empty
+// Event produced a single-entry metadata slice, which DecodeMetadata's fixed
+// positions ([0]=args, [1]=events) would misread as input args instead of an
+// event. Metadata must always contain exactly two entries.
+func TestEndorse_MetadataFixedWidth(t *testing.T) {
+	in := endorsement.Invocation{
+		TxID:         "txid",
+		ProposalHash: []byte("prophash"),
+		Args:         nil,
+		CCID:         ccID,
+	}
+	res := endorsement.ExecutionResult{Event: []byte("myevent")}
+
+	resp, err := NewEndorsementBuilder(fixedSigner{}).Endorse(in, res)
+	if err != nil {
+		t.Fatalf("Endorse failed: %v", err)
+	}
+
+	var tx applicationpb.Tx
+	if err := proto.Unmarshal(resp.Payload, &tx); err != nil {
+		t.Fatalf("unmarshal Tx: %v", err)
+	}
+	if len(tx.Metadata) != 2 {
+		t.Fatalf("expected exactly 2 metadata entries, got %d", len(tx.Metadata))
+	}
+
+	var input peer.ChaincodeInput
+	if err := proto.Unmarshal(tx.Metadata[0], &input); err != nil {
+		t.Fatalf("unmarshal ChaincodeInput: %v", err)
+	}
+	if len(input.Args) != 0 {
+		t.Errorf("expected no input args, got %v", input.Args)
+	}
+
+	var event peer.ChaincodeEvent
+	if err := proto.Unmarshal(tx.Metadata[1], &event); err != nil {
+		t.Fatalf("unmarshal ChaincodeEvent: %v", err)
+	}
+	if string(event.Payload) != "myevent" {
+		t.Errorf("expected event payload %q, got %q", "myevent", event.Payload)
+	}
+}
+
 func TestMarshalRWSet(t *testing.T) {
 	tests := []struct {
 		name      string

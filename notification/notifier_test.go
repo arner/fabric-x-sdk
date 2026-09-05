@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	sdk "github.com/hyperledger/fabric-x-sdk"
+	"github.com/hyperledger/fabric-x-sdk/blocks"
 	"github.com/hyperledger/fabric-x-sdk/notification"
 )
 
@@ -37,13 +38,13 @@ func TestProcessor(t *testing.T) {
 			TxID:     "tx1",
 			BlockNum: 1,
 			TxNum:    0,
-			Status:   notification.StatusCommitted,
+			Status:   blocks.StatusCommitted,
 		},
 		{
 			TxID:     "tx2",
 			BlockNum: 1,
 			TxNum:    1,
-			Status:   notification.StatusMVCCConflict,
+			Status:   blocks.StatusMVCCConflict,
 		},
 	}
 
@@ -108,7 +109,7 @@ func TestProcessorMultipleHandlers(t *testing.T) {
 			TxID:     "tx1",
 			BlockNum: 1,
 			TxNum:    0,
-			Status:   notification.StatusCommitted,
+			Status:   blocks.StatusCommitted,
 		},
 	}
 

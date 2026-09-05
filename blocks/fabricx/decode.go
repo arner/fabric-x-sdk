@@ -1,0 +1,81 @@
+/*
+Copyright IBM Corp. All Rights Reserved.
+
+SPDX-License-Identifier: Apache-2.0
+*/
+
+package fabricx
+
+import (
+	"github.com/hyperledger/fabric-protos-go-apiv2/peer"
+	"github.com/hyperledger/fabric-x-common/api/applicationpb"
+	"github.com/hyperledger/fabric-x-sdk/blocks"
+	"google.golang.org/protobuf/proto"
+)
+
+// DecodeMetadata extracts InputArgs and Events from the transaction metadata.
+func DecodeMetadata(metadata [][]byte) (inputArgs [][]byte, events []byte) {
+	if len(metadata) > 0 && len(metadata[0]) > 0 {
+		var input peer.ChaincodeInput
+		if err := proto.Unmarshal(metadata[0], &input); err == nil {
+			inputArgs = input.Args
+		}
+	}
+	if len(metadata) > 1 && len(metadata[1]) > 0 {
+		events = metadata[1]
+	}
+	return inputArgs, events
+}
+
+// DecodeNamespaces converts Fabric-X TxNamespace protos into the SDK's
+// protocol-neutral per-namespace read/write sets.
+func DecodeNamespaces(namespaces []*applicationpb.TxNamespace) []blocks.NsReadWriteSet {
+	nsRWS := make([]blocks.NsReadWriteSet, len(namespaces))
+	for i, ns := range namespaces {
+		nsrws := blocks.NsReadWriteSet{
+			Namespace: ns.NsId,
+			RWS: blocks.ReadWriteSet{
+				Reads:  []blocks.KVRead{},
+				Writes: []blocks.KVWrite{},
+			},
+		}
+
+		for _, r := range ns.ReadsOnly {
+			read := blocks.KVRead{Key: string(r.Key)}
+			// Version nil means "no constraint" (new key / blind-write semantics).
+			// Version 0 is a valid MVCC constraint: the key was first written at block 0.
+			if r.Version != nil {
+				read.Version = &blocks.Version{
+					BlockNum: *r.Version,
+				}
+			}
+			nsrws.RWS.Reads = append(nsrws.RWS.Reads, read)
+		}
+		for _, bw := range ns.BlindWrites {
+			// All blind writes are now normal world state writes
+			// (events and inputs are in metadata)
+			nsrws.RWS.Writes = append(nsrws.RWS.Writes, blocks.KVWrite{
+				Key:   string(bw.Key),
+				Value: bw.Value,
+			})
+		}
+		for _, rw := range ns.ReadWrites {
+			read := blocks.KVRead{Key: string(rw.Key)}
+			// Version nil means "no constraint" (new key / blind-write semantics).
+			// Version 0 is a valid MVCC constraint: the key was first written at block 0.
+			if rw.Version != nil {
+				read.Version = &blocks.Version{
+					BlockNum: *rw.Version,
+				}
+			}
+			nsrws.RWS.Reads = append(nsrws.RWS.Reads, read)
+			nsrws.RWS.Writes = append(nsrws.RWS.Writes, blocks.KVWrite{
+				Key:   string(rw.Key),
+				Value: rw.Value,
+			})
+		}
+
+		nsRWS[i] = nsrws
+	}
+	return nsRWS
+}

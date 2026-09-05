@@ -83,7 +83,7 @@ func (l *ledger) process(ctx context.Context, env []*common.Envelope) error {
 	// Parse already set each tx.Number to its position in the block; don't renumber
 	// by slice index, which drifts whenever Parse drops a config or malformed tx.
 
-	// Validate all transactions; updates bl.Transactions[i].Valid and returns txFilter.
+	// Validate all transactions; updates bl.Transactions[i].Status and returns txFilter.
 	txFilter, err := l.validator.Validate(&bl)
 	if err != nil {
 		return err

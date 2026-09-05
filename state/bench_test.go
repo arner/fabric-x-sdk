@@ -132,7 +132,7 @@ func makeBlock(blockNum uint64, txCount, writesPerTx int, kg *keyGen) blocks.Blo
 		txs[i] = blocks.Transaction{
 			ID:     fmt.Sprintf("%d-%d", blockNum, i),
 			Number: int64(i),
-			Valid:  true,
+			Status: blocks.StatusCommitted,
 			NsRWS: []blocks.NsReadWriteSet{{
 				Namespace: benchNamespace,
 				RWS:       blocks.ReadWriteSet{Writes: writes},
@@ -162,7 +162,7 @@ func preloadDB(b *testing.B, db *state.VersionedDB, numKeys, writesPerBlock int)
 			Transactions: []blocks.Transaction{{
 				ID:     fmt.Sprintf("preload-%d", blockNum),
 				Number: 0,
-				Valid:  true,
+				Status: blocks.StatusCommitted,
 				NsRWS: []blocks.NsReadWriteSet{{
 					Namespace: benchNamespace,
 					RWS:       blocks.ReadWriteSet{Writes: writes},

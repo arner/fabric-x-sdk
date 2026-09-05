@@ -43,8 +43,9 @@ type MVCCValidator struct {
 }
 
 // Validate validates all transactions in block using MVCC checks.
-// It updates each transaction's Valid field in place and returns a txFilter byte slice
-// with one entry per transaction position, where each byte indicates the validation status.
+// It updates each transaction's Status in place and returns a txFilter
+// byte slice with one entry per transaction position, where each byte
+// indicates the validation status.
 // Returns an error (and the partially-filled txFilter) if a database error occurs.
 func (l *MVCCValidator) Validate(block *Block) ([]byte, error) {
 	l.pendingWrites = make(map[string]struct{})
@@ -58,7 +59,7 @@ func (l *MVCCValidator) Validate(block *Block) ([]byte, error) {
 		for _, rws := range tx.NsRWS {
 			valid, status, err := l.checkNs(rws.Namespace, block.Number, rws.RWS.Reads)
 			if err != nil {
-				tx.Valid = false
+				tx.SetStatus(StatusUnknown, int32(l.invalid), err.Error())
 				txFilter[i] = l.invalid
 				return txFilter, err
 			}
@@ -69,7 +70,11 @@ func (l *MVCCValidator) Validate(block *Block) ([]byte, error) {
 			}
 		}
 
-		tx.Valid = txValid
+		if txValid {
+			tx.SetStatus(StatusCommitted, int32(txStatus), "")
+		} else {
+			tx.SetStatus(StatusMVCCConflict, int32(txStatus), "")
+		}
 		txFilter[i] = txStatus
 
 		if txValid {

@@ -33,21 +33,21 @@ type EndorsementBuilder struct {
 // Endorse generates a signed proposal response based on the invocation and execution result.
 // It follows the Fabric-X transaction and signature format, wrapped in a Fabric envelope.
 func (e EndorsementBuilder) Endorse(inv endorsement.Invocation, res endorsement.ExecutionResult) (*peer.ProposalResponse, error) {
-	// Prepare metadata: [0] = input args, [1] = events
-	var metadata [][]byte
-
-	// Marshal chaincode input args if present (first in metadata)
+	// Metadata is always exactly two entries, [0] = input args, [1] = events,
+	// so DecodeMetadata's fixed positions never drift when one of them is absent.
+	var inputBytes []byte
 	if len(inv.Args) > 0 {
-		inputBytes, err := proto.Marshal(&peer.ChaincodeInput{Args: inv.Args})
+		var err error
+		inputBytes, err = proto.Marshal(&peer.ChaincodeInput{Args: inv.Args})
 		if err != nil {
 			return nil, fmt.Errorf("marshal input: %w", err)
 		}
-		metadata = append(metadata, inputBytes)
 	}
 
-	// Marshal chaincode event if present (second in metadata)
+	var eventBytes []byte
 	if len(res.Event) > 0 {
-		eventBytes, err := proto.Marshal(&peer.ChaincodeEvent{
+		var err error
+		eventBytes, err = proto.Marshal(&peer.ChaincodeEvent{
 			Payload:     res.Event,
 			ChaincodeId: inv.CCID.Name,
 			TxId:        inv.TxID,
@@ -56,8 +56,9 @@ func (e EndorsementBuilder) Endorse(inv endorsement.Invocation, res endorsement.
 		if err != nil {
 			return nil, fmt.Errorf("marshal events: %w", err)
 		}
-		metadata = append(metadata, eventBytes)
 	}
+
+	metadata := [][]byte{inputBytes, eventBytes}
 
 	prpBytes, err := marshalRWSet(res.RWS, inv.CCID.Name, metadata)
 	if err != nil {

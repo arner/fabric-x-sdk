@@ -135,7 +135,7 @@ func (db *VersionedDB) UpdateWorldState(ctx context.Context, b blocks.Block) err
 	defer checkStmt.Close() //nolint:errcheck
 
 	for _, tx := range b.Transactions {
-		if !tx.Valid {
+		if !tx.Valid() {
 			continue
 		}
 		for _, nsrws := range tx.NsRWS {

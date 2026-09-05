@@ -36,7 +36,7 @@ func mustWrite(t *testing.T, db *VersionedDB, ns, key string, block, tx uint64, 
 		Transactions: []blocks.Transaction{{
 			ID:     "txid",
 			Number: int64(tx),
-			Valid:  true,
+			Status: blocks.StatusCommitted,
 			NsRWS: []blocks.NsReadWriteSet{{
 				Namespace: ns,
 				RWS: blocks.ReadWriteSet{
@@ -131,7 +131,7 @@ func TestBlockNumber_Zero(t *testing.T) {
 func TestUpdateWorldState_ReplayIsNoop(t *testing.T) {
 	db := newTestDB(t)
 	bl := blocks.Block{Number: 2, Transactions: []blocks.Transaction{{
-		ID: "txid", Number: 0, Valid: true, NsRWS: []blocks.NsReadWriteSet{{
+		ID: "txid", Number: 0, Status: blocks.StatusCommitted, NsRWS: []blocks.NsReadWriteSet{{
 			Namespace: "ns", RWS: blocks.ReadWriteSet{Writes: []blocks.KVWrite{{Key: "a", Value: []byte("va")}}},
 		}},
 	}}}
@@ -181,10 +181,10 @@ func TestUpdateWorldState_GenuineConflictErrors(t *testing.T) {
 	// write above, but a different value: this is not a legitimate replay and must
 	// be rejected rather than silently discarded.
 	conflicting := blocks.Block{Number: 2, Transactions: []blocks.Transaction{
-		{ID: "txid", Number: 0, Valid: true, NsRWS: []blocks.NsReadWriteSet{{
+		{ID: "txid", Number: 0, Status: blocks.StatusCommitted, NsRWS: []blocks.NsReadWriteSet{{
 			Namespace: "ns", RWS: blocks.ReadWriteSet{Writes: []blocks.KVWrite{{Key: "a", Value: []byte("different")}}},
 		}}},
-		{ID: "tx-other", Number: 1, Valid: true, NsRWS: []blocks.NsReadWriteSet{{
+		{ID: "tx-other", Number: 1, Status: blocks.StatusCommitted, NsRWS: []blocks.NsReadWriteSet{{
 			Namespace: "ns", RWS: blocks.ReadWriteSet{Writes: []blocks.KVWrite{{Key: "b", Value: []byte("vb")}}},
 		}}},
 	}}
@@ -249,11 +249,11 @@ func TestVersion_IndependentKeys(t *testing.T) {
 	mustUpdate(t, db, blocks.Block{
 		Number: 1,
 		Transactions: []blocks.Transaction{
-			{ID: "txid", Number: 0, Valid: true, NsRWS: []blocks.NsReadWriteSet{{
+			{ID: "txid", Number: 0, Status: blocks.StatusCommitted, NsRWS: []blocks.NsReadWriteSet{{
 				Namespace: "ns",
 				RWS:       blocks.ReadWriteSet{Writes: []blocks.KVWrite{{Key: "a", Value: []byte("va")}}},
 			}}},
-			{ID: "txid", Number: 1, Valid: true, NsRWS: []blocks.NsReadWriteSet{{
+			{ID: "txid", Number: 1, Status: blocks.StatusCommitted, NsRWS: []blocks.NsReadWriteSet{{
 				Namespace: "ns",
 				RWS:       blocks.ReadWriteSet{Writes: []blocks.KVWrite{{Key: "b", Value: []byte("vb")}}},
 			}}},
@@ -275,11 +275,11 @@ func TestUpdateWorldState_BlockProgress(t *testing.T) {
 	mustUpdate(t, db, blocks.Block{
 		Number: 2,
 		Transactions: []blocks.Transaction{
-			{ID: "tx1", Number: 0, Valid: true, NsRWS: []blocks.NsReadWriteSet{{
+			{ID: "tx1", Number: 0, Status: blocks.StatusCommitted, NsRWS: []blocks.NsReadWriteSet{{
 				Namespace: "ns",
 				RWS:       blocks.ReadWriteSet{Writes: []blocks.KVWrite{{Key: "a", Value: []byte("va")}}},
 			}}},
-			{ID: "tx2", Number: 1, Valid: true, NsRWS: []blocks.NsReadWriteSet{{
+			{ID: "tx2", Number: 1, Status: blocks.StatusCommitted, NsRWS: []blocks.NsReadWriteSet{{
 				Namespace: "ns",
 				RWS:       blocks.ReadWriteSet{Writes: []blocks.KVWrite{{Key: "b", Value: []byte("vb")}}},
 			}}},

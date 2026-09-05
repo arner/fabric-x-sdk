@@ -33,8 +33,8 @@ type fixedParser struct {
 
 func (f *fixedParser) ParseTx(_ *common.Envelope) (*blocks.Transaction, error) {
 	return &blocks.Transaction{
-		ID:    f.txID,
-		Valid: true,
+		ID:     f.txID,
+		Status: blocks.StatusCommitted,
 		NsRWS: []blocks.NsReadWriteSet{
 			{Namespace: "ns", RWS: f.rws},
 		},
@@ -107,7 +107,7 @@ func TestLocalSubmitter_Submit_ReadVersionMatch(t *testing.T) {
 	// Pre-populate a record at block 1.
 	_ = db.UpdateWorldState(context.Background(), blocks.Block{
 		Number: 1,
-		Transactions: []blocks.Transaction{{ID: "prev", Number: 0, Valid: true, NsRWS: []blocks.NsReadWriteSet{{
+		Transactions: []blocks.Transaction{{ID: "prev", Number: 0, Status: blocks.StatusCommitted, NsRWS: []blocks.NsReadWriteSet{{
 			Namespace: "ns", RWS: blocks.ReadWriteSet{Writes: []blocks.KVWrite{{Key: "k", Value: []byte("old")}}},
 		}}}},
 	})
@@ -127,7 +127,7 @@ func TestLocalSubmitter_Submit_ReadVersionMismatch(t *testing.T) {
 	db := newTestDB(t)
 	_ = db.UpdateWorldState(context.Background(), blocks.Block{
 		Number: 5,
-		Transactions: []blocks.Transaction{{ID: "prev", Number: 0, Valid: true, NsRWS: []blocks.NsReadWriteSet{{
+		Transactions: []blocks.Transaction{{ID: "prev", Number: 0, Status: blocks.StatusCommitted, NsRWS: []blocks.NsReadWriteSet{{
 			Namespace: "ns", RWS: blocks.ReadWriteSet{Writes: []blocks.KVWrite{{Key: "k", Value: []byte("v")}}},
 		}}}},
 	})
@@ -146,7 +146,7 @@ func TestLocalSubmitter_Submit_ReadNilButStateExists(t *testing.T) {
 	db := newTestDB(t)
 	_ = db.UpdateWorldState(context.Background(), blocks.Block{
 		Number: 1,
-		Transactions: []blocks.Transaction{{ID: "prev", Number: 0, Valid: true, NsRWS: []blocks.NsReadWriteSet{{
+		Transactions: []blocks.Transaction{{ID: "prev", Number: 0, Status: blocks.StatusCommitted, NsRWS: []blocks.NsReadWriteSet{{
 			Namespace: "ns", RWS: blocks.ReadWriteSet{Writes: []blocks.KVWrite{{Key: "k", Value: []byte("v")}}},
 		}}}},
 	})

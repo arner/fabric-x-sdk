@@ -574,16 +574,16 @@ func testStreamAllTransactions(t *testing.T, s *testSetup) {
 		select {
 		case batch := <-received:
 			for _, e := range batch.Events {
-				if e.TxID != inv.TxID {
+				if e.ID != inv.TxID {
 					continue // events from unrelated blocks sharing the namespace filter
 				}
 				if !e.Valid() {
 					t.Errorf("expected COMMITTED, got status %v", e.Status)
 				}
-				if len(e.Namespaces) == 0 {
+				if len(e.NsRWS) == 0 {
 					t.Errorf("expected namespaces to be populated (include_read_write_sets)")
 				}
-				if len(e.Metadata) == 0 {
+				if len(e.InputArgs) == 0 && len(e.Events) == 0 {
 					t.Errorf("expected metadata to be populated (include_metadata)")
 				}
 				return

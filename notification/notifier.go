@@ -25,6 +25,7 @@ import (
 	"time"
 
 	sdk "github.com/hyperledger/fabric-x-sdk"
+	"github.com/hyperledger/fabric-x-sdk/blocks"
 )
 
 // NewProcessor creates a new notification processor with the given handlers.
@@ -97,7 +98,7 @@ type TxStatusEvent struct {
 	TxID     string
 	BlockNum uint64
 	TxNum    uint32
-	Status   Status
+	Status   blocks.Status
 	RawCode  int32
 	Reason   string
 }

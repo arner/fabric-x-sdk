@@ -56,17 +56,14 @@ type StatusQuerier interface {
 // always indicates a caller bug, since transaction IDs are unique per submission.
 var ErrAlreadyRegistered = errors.New("txID already registered")
 
-// ErrTxRejected describes a transaction that was broadcast but did not commit.
+// ErrTxRejected wraps a non-committed TxStatusEvent as an error.
 // SubmitAndWait returns the raw TxStatusEvent (a non-committed status is not an
 // error); callers that prefer an error can build one from a non-valid event, for
-// example: if !event.Valid() { return &ErrTxRejected{event.TxID, event.Status, event.RawCode, event.Reason} }.
+// example: if !event.Valid() { return &ErrTxRejected{event} }.
 // RawCode and Reason carry the raw, service-specific status code and label when
 // available.
 type ErrTxRejected struct {
-	TxID    string
-	Status  Status
-	RawCode int32
-	Reason  string
+	TxStatusEvent
 }
 
 func (e *ErrTxRejected) Error() string {
