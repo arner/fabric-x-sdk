@@ -60,7 +60,7 @@ func (p BlockParser) Parse(b *common.Block) (blocks.Block, error) {
 		}
 		if tx != nil {
 			// we also include invalid transactions in case a handler needs their content.
-			tx.Valid = isValid(txFilter, txNum)
+			tx.SetStatus(statusForTx(txFilter, txNum))
 			tx.Number = int64(txNum)
 			block.Transactions = append(block.Transactions, *tx)
 		}
@@ -69,11 +69,11 @@ func (p BlockParser) Parse(b *common.Block) (blocks.Block, error) {
 	return block, nil
 }
 
-func isValid(txFilter []byte, txNum int) bool {
+func statusForTx(txFilter []byte, txNum int) (blocks.Status, int32, string) {
 	if txNum >= len(txFilter) {
-		return false
+		return blocks.StatusUnknown, 0, "missing tx filter entry"
 	}
-	return peer.TxValidationCode(txFilter[txNum]) == peer.TxValidationCode_VALID
+	return StatusFromValidationCode(peer.TxValidationCode(txFilter[txNum]))
 }
 
 func (BlockParser) ParseTx(env *common.Envelope) (*blocks.Transaction, error) {

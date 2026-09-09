@@ -12,26 +12,21 @@ import (
 
 	"github.com/hyperledger/fabric-x-common/api/applicationpb"
 	sdk "github.com/hyperledger/fabric-x-sdk"
+	"github.com/hyperledger/fabric-x-sdk/blocks"
 )
 
 // CommittedTxEvent is a single transaction event received from StreamAllTransactions.
-// Namespaces, Endorsements, and Metadata are populated only when the corresponding flags were
-// set in the StreamAllRequest.
+// It embeds blocks.Transaction, so InputArgs/Events/NsRWS are populated only
+// when IncludeMetadata/IncludeReadWriteSets were set in the StreamAllRequest,
+// and Status/RawCode/Reason/Valid always reflect the event's outcome.
 type CommittedTxEvent struct {
-	TxID         string
-	BlockNum     uint64
-	TxNum        uint32
-	Status       Status
-	RawCode      int32
-	Reason       string
-	Namespaces   []*applicationpb.TxNamespace
+	blocks.Transaction
+	// BlockNum is the number of the block this transaction committed in.
+	// Transaction.Number is the transaction's index within that block.
+	BlockNum uint64
+	// Endorsements is populated only when IncludeEndorsements was set in the
+	// StreamAllRequest.
 	Endorsements []*applicationpb.Endorsements
-	Metadata     [][]byte
-}
-
-// Valid returns true if the transaction was committed successfully.
-func (e CommittedTxEvent) Valid() bool {
-	return e.Status.Valid()
 }
 
 // AllTxBatch is a batch of transaction events from a single committed block.
@@ -66,17 +61,21 @@ type StreamAllRequest struct {
 	FilterNamespaces []string
 	// FilterStatus limits events to transactions with at least one of the listed
 	// statuses. Nil means no status filter. Most Status values map to a single
-	// service code, but StatusMalformed is coarser: it matches every malformed-
-	// envelope variant the underlying service reports.
-	FilterStatus []Status
-	// IncludeReadWriteSets requests that Namespaces (read/write sets) be populated
+	// service code, but StatusMalformed is coarser (it matches every malformed-
+	// envelope variant the underlying service reports) and
+	// StatusEndorsementPolicyFailure maps onto the same code as
+	// StatusInvalidSignature, since the Fabric-X committer doesn't distinguish
+	// the two. StatusUnrecognized names no fixed service code, so filtering a
+	// stream by it alone matches nothing.
+	FilterStatus []blocks.Status
+	// IncludeReadWriteSets requests that NsRWS (read/write sets) be populated
 	// on each CommittedTxEvent.
 	IncludeReadWriteSets bool
 	// IncludeEndorsements requests that Endorsements be populated on each
 	// CommittedTxEvent.
 	IncludeEndorsements bool
-	// IncludeMetadata requests that Metadata (events and input args) be populated
-	// on each CommittedTxEvent.
+	// IncludeMetadata requests that InputArgs and Events be populated on each
+	// CommittedTxEvent.
 	IncludeMetadata bool
 }
 

@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	sdk "github.com/hyperledger/fabric-x-sdk"
+	"github.com/hyperledger/fabric-x-sdk/blocks"
 	"github.com/hyperledger/fabric-x-sdk/notification"
 )
 
@@ -46,10 +47,10 @@ func (m *mockAllTxHandler) HandleBatch(_ context.Context, batch notification.All
 func TestAllTxStreamer_DeliversBatchesToHandlers(t *testing.T) {
 	batches := []notification.AllTxBatch{
 		{BlockNumber: 1, Events: []notification.CommittedTxEvent{
-			{TxID: "tx1", BlockNum: 1, TxNum: 0, Status: notification.StatusCommitted},
+			{Transaction: blocks.Transaction{ID: "tx1", Status: blocks.StatusCommitted}, BlockNum: 1},
 		}},
 		{BlockNumber: 2, Events: []notification.CommittedTxEvent{
-			{TxID: "tx2", BlockNum: 2, TxNum: 0, Status: notification.StatusMVCCConflict},
+			{Transaction: blocks.Transaction{ID: "tx2", Status: blocks.StatusMVCCConflict}, BlockNum: 2},
 		}},
 	}
 
@@ -65,10 +66,10 @@ func TestAllTxStreamer_DeliversBatchesToHandlers(t *testing.T) {
 	if len(handler.batches) != 2 {
 		t.Fatalf("expected 2 batches, got %d", len(handler.batches))
 	}
-	if handler.batches[0].BlockNumber != 1 || handler.batches[0].Events[0].TxID != "tx1" {
+	if handler.batches[0].BlockNumber != 1 || handler.batches[0].Events[0].ID != "tx1" {
 		t.Errorf("unexpected first batch: %+v", handler.batches[0])
 	}
-	if handler.batches[1].BlockNumber != 2 || handler.batches[1].Events[0].TxID != "tx2" {
+	if handler.batches[1].BlockNumber != 2 || handler.batches[1].Events[0].ID != "tx2" {
 		t.Errorf("unexpected second batch: %+v", handler.batches[1])
 	}
 }
@@ -76,7 +77,7 @@ func TestAllTxStreamer_DeliversBatchesToHandlers(t *testing.T) {
 func TestAllTxStreamer_MultipleHandlers(t *testing.T) {
 	batches := []notification.AllTxBatch{
 		{BlockNumber: 5, Events: []notification.CommittedTxEvent{
-			{TxID: "txA", BlockNum: 5, TxNum: 0, Status: notification.StatusCommitted},
+			{Transaction: blocks.Transaction{ID: "txA", Status: blocks.StatusCommitted}, BlockNum: 5},
 		}},
 	}
 
@@ -124,7 +125,7 @@ func TestAllTxStreamer_RequestPassedToPeer(t *testing.T) {
 
 	req := &notification.StreamAllRequest{
 		FilterNamespaces:     []string{"mycc"},
-		FilterStatus:         []notification.Status{notification.StatusCommitted},
+		FilterStatus:         []blocks.Status{blocks.StatusCommitted},
 		IncludeReadWriteSets: true,
 	}
 	_ = streamer.Stream(context.Background(), req)
@@ -146,12 +147,14 @@ func TestAllTxStreamer_PeerErrorPropagates(t *testing.T) {
 }
 
 func TestCommittedTxEvent_Valid(t *testing.T) {
-	committed := notification.CommittedTxEvent{Status: notification.StatusCommitted}
+	var committed notification.CommittedTxEvent
+	committed.SetStatus(blocks.StatusCommitted, 0, "")
 	if !committed.Valid() {
 		t.Error("COMMITTED event should be valid")
 	}
 
-	aborted := notification.CommittedTxEvent{Status: notification.StatusMVCCConflict}
+	var aborted notification.CommittedTxEvent
+	aborted.SetStatus(blocks.StatusMVCCConflict, 0, "")
 	if aborted.Valid() {
 		t.Error("ABORTED event should not be valid")
 	}

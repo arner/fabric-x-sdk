@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/hyperledger/fabric-protos-go-apiv2/common"
-	"github.com/hyperledger/fabric-protos-go-apiv2/peer"
 	"github.com/hyperledger/fabric-x-common/api/applicationpb"
 	"github.com/hyperledger/fabric-x-common/api/committerpb"
 	"github.com/hyperledger/fabric-x-common/protoutil"
@@ -63,7 +62,7 @@ func (p BlockParser) Parse(b *common.Block) (blocks.Block, error) {
 		}
 		if tx != nil {
 			// we also include invalid transactions in case a handler needs their content.
-			tx.Valid = isValid(txFilter, txNum)
+			tx.SetStatus(statusForTx(txFilter, txNum))
 			tx.Number = int64(txNum)
 			block.Transactions = append(block.Transactions, *tx)
 		}
@@ -72,11 +71,11 @@ func (p BlockParser) Parse(b *common.Block) (blocks.Block, error) {
 	return block, nil
 }
 
-func isValid(txFilter []byte, txNum int) bool {
+func statusForTx(txFilter []byte, txNum int) (blocks.Status, int32, string) {
 	if txNum >= len(txFilter) {
-		return false
+		return blocks.StatusUnknown, 0, "missing tx filter entry"
 	}
-	return committerpb.Status(txFilter[txNum]) == committerpb.Status_COMMITTED
+	return StatusFromCommitterStatus(committerpb.Status(txFilter[txNum]))
 }
 
 func (BlockParser) ParseTx(env *common.Envelope) (*blocks.Transaction, error) {
@@ -102,69 +101,12 @@ func (BlockParser) ParseTx(env *common.Envelope) (*blocks.Transaction, error) {
 		return nil, fmt.Errorf("transaction: %w", err)
 	}
 
+	inputArgs, events := DecodeMetadata(ptx.Metadata)
 	tx := &blocks.Transaction{
-		ID:    chdr.TxId,
-		NsRWS: make([]blocks.NsReadWriteSet, len(ptx.Namespaces)),
-	}
-
-	// Extract from metadata: [0] = input args, [1] = events
-	if len(ptx.Metadata) > 0 && len(ptx.Metadata[0]) > 0 {
-		var input peer.ChaincodeInput
-		if err := proto.Unmarshal(ptx.Metadata[0], &input); err == nil {
-			tx.InputArgs = input.Args
-		}
-	}
-
-	if len(ptx.Metadata) > 1 && len(ptx.Metadata[1]) > 0 {
-		tx.Events = ptx.Metadata[1]
-	}
-
-	// read / write set
-	for i, ns := range ptx.Namespaces {
-		nsrws := blocks.NsReadWriteSet{
-			Namespace: ns.NsId,
-			RWS: blocks.ReadWriteSet{
-				Reads:  []blocks.KVRead{},
-				Writes: []blocks.KVWrite{},
-			},
-		}
-
-		for _, r := range ns.ReadsOnly {
-			read := blocks.KVRead{Key: string(r.Key)}
-			// Version nil means "no constraint" (new key / blind-write semantics).
-			// Version 0 is a valid MVCC constraint: the key was first written at block 0.
-			if r.Version != nil {
-				read.Version = &blocks.Version{
-					BlockNum: *r.Version,
-				}
-			}
-			nsrws.RWS.Reads = append(nsrws.RWS.Reads, read)
-		}
-		for _, bw := range ns.BlindWrites {
-			// All blind writes are now normal world state writes
-			// (events and inputs are in metadata)
-			nsrws.RWS.Writes = append(nsrws.RWS.Writes, blocks.KVWrite{
-				Key:   string(bw.Key),
-				Value: bw.Value,
-			})
-		}
-		for _, rw := range ns.ReadWrites {
-			read := blocks.KVRead{Key: string(rw.Key)}
-			// Version nil means "no constraint" (new key / blind-write semantics).
-			// Version 0 is a valid MVCC constraint: the key was first written at block 0.
-			if rw.Version != nil {
-				read.Version = &blocks.Version{
-					BlockNum: *rw.Version,
-				}
-			}
-			nsrws.RWS.Reads = append(nsrws.RWS.Reads, read)
-			nsrws.RWS.Writes = append(nsrws.RWS.Writes, blocks.KVWrite{
-				Key:   string(rw.Key),
-				Value: rw.Value,
-			})
-		}
-
-		tx.NsRWS[i] = nsrws
+		ID:        chdr.TxId,
+		InputArgs: inputArgs,
+		Events:    events,
+		NsRWS:     DecodeNamespaces(ptx.Namespaces),
 	}
 
 	return tx, nil

@@ -173,52 +173,26 @@ func toProtoStreamAllRequest(req *notification.StreamAllRequest) *committerpb.St
 	}
 }
 
-// statusFromProto maps a Fabric-X sidecar status onto the protocol-neutral
-// notification.Status, alongside the original code's number and name so no
-// diagnostic detail is lost even for codes this SDK doesn't explicitly name.
-func statusFromProto(s committerpb.Status) (notification.Status, int32, string) {
-	var status notification.Status
-	switch s {
-	case committerpb.Status_COMMITTED:
-		status = notification.StatusCommitted
-	case committerpb.Status_STATUS_UNSPECIFIED:
-		status = notification.StatusUnknown
-	case committerpb.Status_ABORTED_SIGNATURE_INVALID:
-		status = notification.StatusInvalidSignature
-	case committerpb.Status_ABORTED_MVCC_CONFLICT:
-		status = notification.StatusMVCCConflict
-	case committerpb.Status_REJECTED_DUPLICATE_TX_ID:
-		status = notification.StatusDuplicateTxID
-	default:
-		if s >= 100 {
-			// The MALFORMED_* family (and any future pre-validation rejection
-			// code the sidecar adds in this range before the SDK names it).
-			status = notification.StatusMalformed
-		} else {
-			status = notification.StatusUnrecognized
-		}
-	}
-	return status, int32(s), s.String()
-}
-
 // toProtoFilterStatus expands the coarse, protocol-neutral filter statuses into
-// the concrete sidecar status codes they cover.
-func toProtoFilterStatus(statuses []notification.Status) []committerpb.Status {
+// the concrete sidecar status codes they cover. StatusEndorsementPolicyFailure
+// has no distinct Fabric-X code of its own so it expands to the same code as
+// StatusInvalidSignature. StatusUnrecognized is dropped.
+func toProtoFilterStatus(statuses []blocks.Status) []committerpb.Status {
 	if len(statuses) == 0 {
 		return nil
 	}
 	var out []committerpb.Status
 	for _, s := range statuses {
 		switch s {
-		case notification.StatusCommitted:
+		case blocks.StatusCommitted:
 			out = append(out, committerpb.Status_COMMITTED)
-		case notification.StatusInvalidSignature:
+		case blocks.StatusInvalidSignature, blocks.StatusEndorsementPolicyFailure:
 			out = append(out, committerpb.Status_ABORTED_SIGNATURE_INVALID)
-		case notification.StatusMVCCConflict:
+		case blocks.StatusMVCCConflict:
 			out = append(out, committerpb.Status_ABORTED_MVCC_CONFLICT)
-		case notification.StatusDuplicateTxID:
+		case blocks.StatusDuplicateTxID:
 			out = append(out, committerpb.Status_REJECTED_DUPLICATE_TX_ID)
-		case notification.StatusMalformed:
+		case blocks.StatusMalformed:
 			// Sidecar codes >= 101 are the MALFORMED_* family (100 is the
 			// duplicate-tx-id rejection, handled above as its own status).
 			for code := range committerpb.Status_name {
@@ -226,7 +200,7 @@ func toProtoFilterStatus(statuses []notification.Status) []committerpb.Status {
 					out = append(out, committerpb.Status(code))
 				}
 			}
-		case notification.StatusUnknown:
+		case blocks.StatusUnknown:
 			out = append(out, committerpb.Status_STATUS_UNSPECIFIED)
 			// StatusUnrecognized has no corresponding sidecar code to filter by.
 		}
@@ -237,18 +211,19 @@ func toProtoFilterStatus(statuses []notification.Status) []committerpb.Status {
 func convertTxEventBatch(batch *committerpb.TxEventBatch) notification.AllTxBatch {
 	events := make([]notification.CommittedTxEvent, len(batch.Events))
 	for i, e := range batch.Events {
-		status, rawCode, reason := statusFromProto(e.Status)
+		inputArgs, txEvents := fabricx.DecodeMetadata(e.Metadata)
 		events[i] = notification.CommittedTxEvent{
-			TxID:         e.Ref.GetTxId(),
+			Transaction: blocks.Transaction{
+				ID:        e.Ref.GetTxId(),
+				Number:    int64(e.Ref.GetTxNum()),
+				InputArgs: inputArgs,
+				Events:    txEvents,
+				NsRWS:     fabricx.DecodeNamespaces(e.Namespaces),
+			},
 			BlockNum:     e.Ref.GetBlockNum(),
-			TxNum:        e.Ref.GetTxNum(),
-			Status:       status,
-			RawCode:      rawCode,
-			Reason:       reason,
-			Namespaces:   e.Namespaces,
 			Endorsements: e.Endorsements,
-			Metadata:     e.Metadata,
 		}
+		events[i].SetStatus(fabricx.StatusFromCommitterStatus(e.Status))
 	}
 	return notification.AllTxBatch{BlockNumber: batch.BlockNumber, Events: events}
 }
@@ -257,7 +232,7 @@ func convertTxEventBatch(batch *committerpb.TxEventBatch) notification.AllTxBatc
 func convertTxStatuses(statuses []*committerpb.TxStatus) []notification.TxStatusEvent {
 	events := make([]notification.TxStatusEvent, 0, len(statuses))
 	for _, s := range statuses {
-		status, rawCode, reason := statusFromProto(s.Status)
+		status, rawCode, reason := fabricx.StatusFromCommitterStatus(s.Status)
 		events = append(events, notification.TxStatusEvent{
 			TxID:     s.Ref.GetTxId(),
 			BlockNum: s.Ref.GetBlockNum(),
@@ -275,10 +250,10 @@ func convertNotificationResponse(res *committerpb.NotificationResponse) []notifi
 	for _, txID := range res.TimeoutTxIds {
 		events = append(events, notification.TxStatusEvent{
 			TxID:   txID,
-			Status: notification.StatusUnknown,
+			Status: blocks.StatusUnknown,
 		})
 	}
-	// Note: RejectedTxIds field was added in a later version of fabric-x-common.
+	// TODO: RejectedTxIds field was added in a later version of fabric-x-common.
 	// The current version (v0.1.1-0.20260219094834-26c5a49ed548) only has
 	// TxStatusEvents and TimeoutTxIds fields. Rejections will be handled
 	// when the SDK upgrades to a newer version of fabric-x-common.

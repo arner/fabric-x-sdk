@@ -67,13 +67,27 @@ type Block struct {
 }
 
 // Transaction is a parsed endorser transaction from a block. Both valid and invalid
-// transactions are included; check the Valid field before processing writes.
+// transactions are included; check Valid() before processing writes.
 type Transaction struct {
 	ID        string
 	Number    int64
 	InputArgs [][]byte
-	Status    int
-	Valid     bool
+	Status    Status
+	RawCode   int32
+	Reason    string
 	Events    []byte
 	NsRWS     []NsReadWriteSet
+}
+
+// Valid reports whether the transaction committed successfully.
+func (t Transaction) Valid() bool {
+	return t.Status.Valid()
+}
+
+// SetStatus records status and its underlying ledger-specific raw code and
+// human-readable reason.
+func (t *Transaction) SetStatus(status Status, rawCode int32, reason string) {
+	t.Status = status
+	t.RawCode = rawCode
+	t.Reason = reason
 }

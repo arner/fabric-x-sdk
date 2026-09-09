@@ -178,7 +178,7 @@ func TestMVCCValidator(t *testing.T) {
 			if !tc.wantErr && err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			valid := block.Transactions[0].Valid
+			valid := block.Transactions[0].Valid()
 			status := txFilter[0]
 			if valid != tc.wantValid {
 				t.Errorf("valid: got %v, want %v", valid, tc.wantValid)
@@ -242,14 +242,14 @@ func TestMVCCValidatorIntraBlock(t *testing.T) {
 				t.Fatalf("Validate: unexpected error: %v", err)
 			}
 
-			if !block.Transactions[0].Valid || txFilter[0] != statusValid {
-				t.Errorf("tx0: expected valid, got valid=%v status=%v", block.Transactions[0].Valid, txFilter[0])
+			if !block.Transactions[0].Valid() || txFilter[0] != statusValid {
+				t.Errorf("tx0: expected valid, got valid=%v status=%v", block.Transactions[0].Valid(), txFilter[0])
 			}
-			if block.Transactions[1].Valid || txFilter[1] != statusConflict {
-				t.Errorf("tx1: expected conflict, got valid=%v status=%v", block.Transactions[1].Valid, txFilter[1])
+			if block.Transactions[1].Valid() || txFilter[1] != statusConflict {
+				t.Errorf("tx1: expected conflict, got valid=%v status=%v", block.Transactions[1].Valid(), txFilter[1])
 			}
-			if !block.Transactions[2].Valid || txFilter[2] != statusValid {
-				t.Errorf("tx2: expected valid for unrelated key, got valid=%v status=%v", block.Transactions[2].Valid, txFilter[2])
+			if !block.Transactions[2].Valid() || txFilter[2] != statusValid {
+				t.Errorf("tx2: expected valid for unrelated key, got valid=%v status=%v", block.Transactions[2].Valid(), txFilter[2])
 			}
 
 			// A second Validate call resets state; tx1's read of "k" is valid again.
@@ -269,8 +269,8 @@ func TestMVCCValidatorIntraBlock(t *testing.T) {
 			if err != nil {
 				t.Fatalf("second Validate: unexpected error: %v", err)
 			}
-			if !block2.Transactions[0].Valid || txFilter2[0] != statusValid {
-				t.Errorf("after second Validate: expected valid, got valid=%v status=%v", block2.Transactions[0].Valid, txFilter2[0])
+			if !block2.Transactions[0].Valid() || txFilter2[0] != statusValid {
+				t.Errorf("after second Validate: expected valid, got valid=%v status=%v", block2.Transactions[0].Valid(), txFilter2[0])
 			}
 		})
 	}
@@ -308,8 +308,8 @@ func TestMVCCValidatorCrossBlockStaleRead(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Validate block1: %v", err)
 			}
-			if !block1.Transactions[0].Valid || txFilter1[0] != statusValid {
-				t.Fatalf("block1 tx0: expected valid, got valid=%v status=%v", block1.Transactions[0].Valid, txFilter1[0])
+			if !block1.Transactions[0].Valid() || txFilter1[0] != statusValid {
+				t.Fatalf("block1 tx0: expected valid, got valid=%v status=%v", block1.Transactions[0].Valid(), txFilter1[0])
 			}
 			// Simulate the ledger committing tx0's write before block 2 is validated.
 			db[ns+"/balance"] = &WriteRecord{BlockNum: 1, TxNum: 0, Version: 1}
@@ -332,9 +332,9 @@ func TestMVCCValidatorCrossBlockStaleRead(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Validate block2: %v", err)
 			}
-			if block2.Transactions[0].Valid || txFilter2[0] != statusConflict {
+			if block2.Transactions[0].Valid() || txFilter2[0] != statusConflict {
 				t.Errorf("block2 tx1: expected conflict (stale read of key first written in block1), got valid=%v status=%v",
-					block2.Transactions[0].Valid, txFilter2[0])
+					block2.Transactions[0].Valid(), txFilter2[0])
 			}
 		})
 	}

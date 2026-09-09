@@ -15,6 +15,7 @@ import (
 	"time"
 
 	sdk "github.com/hyperledger/fabric-x-sdk"
+	"github.com/hyperledger/fabric-x-sdk/blocks"
 	"github.com/hyperledger/fabric-x-sdk/notification"
 )
 
@@ -124,7 +125,7 @@ func TestFinalityListener_ReceivesCommittedEvent(t *testing.T) {
 
 	peer.sendEvent(t, ctx, notification.TxStatusEvent{
 		TxID:   "tx1",
-		Status: notification.StatusCommitted,
+		Status: blocks.StatusCommitted,
 	})
 
 	select {
@@ -153,8 +154,8 @@ func TestFinalityListener_MultipleWaiters(t *testing.T) {
 		t.Fatalf("Register txB: %v", err)
 	}
 
-	peer.sendEvent(t, ctx, notification.TxStatusEvent{TxID: "txB", Status: notification.StatusCommitted})
-	peer.sendEvent(t, ctx, notification.TxStatusEvent{TxID: "txA", Status: notification.StatusMVCCConflict})
+	peer.sendEvent(t, ctx, notification.TxStatusEvent{TxID: "txB", Status: blocks.StatusCommitted})
+	peer.sendEvent(t, ctx, notification.TxStatusEvent{TxID: "txA", Status: blocks.StatusMVCCConflict})
 
 	for _, tc := range []struct {
 		ch    <-chan notification.TxStatusEvent
@@ -209,7 +210,7 @@ func TestFinalityListener_Unregister(t *testing.T) {
 	// Sending an event for the unregistered txID must not panic or block.
 	peer.sendEvent(t, context.Background(), notification.TxStatusEvent{
 		TxID:   "tx-cancel",
-		Status: notification.StatusCommitted,
+		Status: blocks.StatusCommitted,
 	})
 }
 
@@ -296,7 +297,7 @@ func TestFinalityListener_ReconnectResubscribes(t *testing.T) {
 	}
 	peer.sendEvent(t, context.Background(), notification.TxStatusEvent{
 		TxID:   "tx-after-reconnect",
-		Status: notification.StatusCommitted,
+		Status: blocks.StatusCommitted,
 	})
 
 	select {
@@ -316,7 +317,7 @@ func TestFinalityListener_ReconcilesOnReconnect(t *testing.T) {
 	peer := &controlledPeer{
 		failFirst: true,
 		statuses: map[string]notification.TxStatusEvent{
-			"tx-offline": {TxID: "tx-offline", Status: notification.StatusCommitted},
+			"tx-offline": {TxID: "tx-offline", Status: blocks.StatusCommitted},
 		},
 	}
 
@@ -347,7 +348,7 @@ func TestFinalityListener_ReconcilesOnReconnect(t *testing.T) {
 
 // TestErrTxRejected verifies the error type.
 func TestErrTxRejected(t *testing.T) {
-	err := &notification.ErrTxRejected{TxID: "abc", Status: notification.StatusMVCCConflict}
+	err := &notification.ErrTxRejected{TxStatusEvent: notification.TxStatusEvent{TxID: "abc", Status: blocks.StatusMVCCConflict}}
 	if err.Error() == "" {
 		t.Error("expected non-empty error message")
 	}

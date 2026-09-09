@@ -77,7 +77,7 @@ func (s LocalSubmitter) Submit(ctx context.Context, end sdk.Endorsement) error {
 	if err != nil {
 		return fmt.Errorf("unpackage proposal: %w", err)
 	}
-	tx.Valid = true
+	tx.SetStatus(blocks.StatusCommitted, 0, "")
 
 	blockNum, err := s.sharedState.BlockNumber(ctx)
 	if err != nil {
