@@ -7,24 +7,27 @@ SPDX-License-Identifier: Apache-2.0
 package fabricx
 
 import (
-	"github.com/hyperledger/fabric-protos-go-apiv2/peer"
 	"github.com/hyperledger/fabric-x-common/api/applicationpb"
 	"github.com/hyperledger/fabric-x-sdk/blocks"
-	"google.golang.org/protobuf/proto"
 )
 
-// DecodeMetadata extracts InputArgs and Events from the transaction metadata.
-func DecodeMetadata(metadata [][]byte) (inputArgs [][]byte, events []byte) {
-	if len(metadata) > 0 && len(metadata[0]) > 0 {
-		var input peer.ChaincodeInput
-		if err := proto.Unmarshal(metadata[0], &input); err == nil {
-			inputArgs = input.Args
+// DecodeMetadata extracts Events, Payload, and InputArgs from the transaction metadata.
+// The layout is purely positional: metadata[0] = event, metadata[1] = payload,
+// metadata[2] = arg count (1 byte), metadata[3:3+count] = args.
+func DecodeMetadata(metadata [][]byte) (events []byte, payload []byte, inputArgs [][]byte) {
+	if len(metadata) > 0 {
+		events = metadata[0]
+	}
+	if len(metadata) > 1 {
+		payload = metadata[1]
+	}
+	if len(metadata) > 2 && len(metadata[2]) > 0 {
+		count := int(metadata[2][0])
+		if end := 3 + count; end <= len(metadata) {
+			inputArgs = metadata[3:end]
 		}
 	}
-	if len(metadata) > 1 && len(metadata[1]) > 0 {
-		events = metadata[1]
-	}
-	return inputArgs, events
+	return events, payload, inputArgs
 }
 
 // DecodeNamespaces converts Fabric-X TxNamespace protos into the SDK's

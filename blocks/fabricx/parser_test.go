@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/hyperledger/fabric-protos-go-apiv2/common"
-	"github.com/hyperledger/fabric-protos-go-apiv2/peer"
 	"github.com/hyperledger/fabric-x-common/api/applicationpb"
 	"github.com/hyperledger/fabric-x-common/api/committerpb"
 	sdk "github.com/hyperledger/fabric-x-sdk"
@@ -232,18 +231,10 @@ func TestParse_ReadWriteZeroVersion(t *testing.T) {
 func TestParse_Events(t *testing.T) {
 	txID := "txid-event"
 	eventPayload := []byte(`{"type":"Transfer"}`)
-	eventBytes, err := proto.Marshal(&peer.ChaincodeEvent{
-		ChaincodeId: "ns",
-		TxId:        txID,
-		EventName:   "log",
-		Payload:     eventPayload,
-	})
-	if err != nil {
-		t.Fatalf("marshal event: %v", err)
-	}
 
 	tx := &applicationpb.Tx{
-		Metadata: [][]byte{nil, eventBytes}, // no input at [0], event at [1]
+		// [0]=event, [1]=payload (absent), [2]=arg count (zero)
+		Metadata: [][]byte{eventPayload, nil, {0}},
 		Namespaces: []*applicationpb.TxNamespace{{
 			NsId: "ns",
 			BlindWrites: []*applicationpb.Write{
@@ -259,16 +250,9 @@ func TestParse_Events(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// event bytes must be populated
-	if len(btx.Events) == 0 {
-		t.Fatal("expected Events to be set")
-	}
-	evt := &peer.ChaincodeEvent{}
-	if err := proto.Unmarshal(btx.Events, evt); err != nil {
-		t.Fatalf("unmarshal events: %v", err)
-	}
-	if string(evt.Payload) != string(eventPayload) {
-		t.Errorf("event payload: got %q, want %q", evt.Payload, eventPayload)
+	// event is raw bytes, no classic-Fabric ChaincodeEvent wrapper
+	if string(btx.Events) != string(eventPayload) {
+		t.Errorf("events: got %q, want %q", btx.Events, eventPayload)
 	}
 
 	// all writes should be in NsRWS (no synthetic writes to strip)
@@ -281,13 +265,12 @@ func TestParse_Events(t *testing.T) {
 func TestParse_InputArgs(t *testing.T) {
 	txID := "txid-input"
 	args := [][]byte{[]byte("invoke"), []byte("arg1"), []byte("arg2")}
-	inputBytes, err := proto.Marshal(&peer.ChaincodeInput{Args: args})
-	if err != nil {
-		t.Fatalf("marshal input: %v", err)
-	}
+
+	// [0]=event (absent), [1]=payload (absent), [2]=arg count, [3:]=args
+	metadata := append([][]byte{nil, nil, {byte(len(args))}}, args...)
 
 	tx := &applicationpb.Tx{
-		Metadata: [][]byte{inputBytes, nil}, // input at [0], no event at [1]
+		Metadata: metadata,
 		Namespaces: []*applicationpb.TxNamespace{{
 			NsId: "ns",
 			BlindWrites: []*applicationpb.Write{

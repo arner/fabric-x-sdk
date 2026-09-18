@@ -211,13 +211,14 @@ func toProtoFilterStatus(statuses []blocks.Status) []committerpb.Status {
 func convertTxEventBatch(batch *committerpb.TxEventBatch) notification.AllTxBatch {
 	events := make([]notification.CommittedTxEvent, len(batch.Events))
 	for i, e := range batch.Events {
-		inputArgs, txEvents := fabricx.DecodeMetadata(e.Metadata)
+		txEvents, payload, inputArgs := fabricx.DecodeMetadata(e.Metadata)
 		events[i] = notification.CommittedTxEvent{
 			Transaction: blocks.Transaction{
 				ID:        e.Ref.GetTxId(),
 				Number:    int64(e.Ref.GetTxNum()),
 				InputArgs: inputArgs,
 				Events:    txEvents,
+				Payload:   payload,
 				NsRWS:     fabricx.DecodeNamespaces(e.Namespaces),
 			},
 			BlockNum:     e.Ref.GetBlockNum(),

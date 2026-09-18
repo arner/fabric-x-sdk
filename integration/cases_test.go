@@ -394,6 +394,7 @@ func testInputArgsAndEvents(t *testing.T, s *testSetup) {
 	key := t.Name() + "/" + rand.Text()
 	args := [][]byte{[]byte("invoke"), []byte("arg1"), []byte("arg2")}
 	eventPayload := []byte(`{"type":"Transfer"}`)
+	responsePayload := []byte("execution-result-payload")
 
 	inv := s.newInvocation(t, args)
 
@@ -401,7 +402,7 @@ func testInputArgsAndEvents(t *testing.T, s *testSetup) {
 	for _, b := range s.builders {
 		resp, err := b.Endorse(inv, endorsement.Success(blocks.ReadWriteSet{
 			Writes: []blocks.KVWrite{{Key: key, Value: []byte("v")}},
-		}, eventPayload, nil))
+		}, eventPayload, responsePayload))
 		if err != nil {
 			t.Fatalf("Endorse: %v", err)
 		}
@@ -431,16 +432,30 @@ func testInputArgsAndEvents(t *testing.T, s *testSetup) {
 		}
 	}
 
-	// events
+	// events: Fabric keeps the classic-Fabric ChaincodeEvent wrapper (external
+	// tooling may expect it); Fabric-X commits the raw bytes with no wrapper.
 	if len(tx.Events) == 0 {
 		t.Fatal("Events: expected non-empty")
 	}
-	evt := &peer.ChaincodeEvent{}
-	if err := proto.Unmarshal(tx.Events, evt); err != nil {
-		t.Fatalf("unmarshal Events: %v", err)
+	switch s.networkType {
+	case "fabric":
+		evt := &peer.ChaincodeEvent{}
+		if err := proto.Unmarshal(tx.Events, evt); err != nil {
+			t.Fatalf("unmarshal Events: %v", err)
+		}
+		if string(evt.Payload) != string(eventPayload) {
+			t.Errorf("event payload: got %q, want %q", evt.Payload, eventPayload)
+		}
+	default:
+		if string(tx.Events) != string(eventPayload) {
+			t.Errorf("event payload: got %q, want %q", tx.Events, eventPayload)
+		}
 	}
-	if string(evt.Payload) != string(eventPayload) {
-		t.Errorf("event payload: got %q, want %q", evt.Payload, eventPayload)
+
+	// payload: the generic ExecutionResult.Payload channel, committed on both
+	// backends (ChaincodeAction.Response.Payload on Fabric, metadata[1] on Fabric-X).
+	if string(tx.Payload) != string(responsePayload) {
+		t.Errorf("payload: got %q, want %q", tx.Payload, responsePayload)
 	}
 }
 

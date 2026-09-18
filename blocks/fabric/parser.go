@@ -136,6 +136,9 @@ func (BlockParser) ParseTx(env *common.Envelope) (*blocks.Transaction, error) {
 		return nil, fmt.Errorf("chaincode action: %w", err)
 	}
 	tx.Events = ccAct.Events
+	if ccAct.Response != nil {
+		tx.Payload = ccAct.Response.Payload
+	}
 
 	// read/write set
 	txRWSet := &rwset.TxReadWriteSet{}
