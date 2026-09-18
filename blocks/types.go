@@ -76,6 +76,7 @@ type Transaction struct {
 	RawCode   int32
 	Reason    string
 	Events    []byte
+	Payload   []byte
 	NsRWS     []NsReadWriteSet
 }
 

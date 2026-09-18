@@ -50,8 +50,9 @@ func (e EndorsementBuilder) Endorse(in endorsement.Invocation, res endorsement.E
 		}
 	}
 
+	// Status is hardcoded to 200 and Message is dropped. The payload of the execution result is preserved.
 	ccid := &peer.ChaincodeID{Name: in.Namespace, Version: in.ChaincodeVersion}
-	prpBytes, err := protoutil.GetBytesProposalResponsePayload(in.ProposalHash, &peer.Response{}, simResBytes, event, ccid)
+	prpBytes, err := protoutil.GetBytesProposalResponsePayload(in.ProposalHash, &peer.Response{Status: 200, Payload: res.Payload}, simResBytes, event, ccid)
 	if err != nil {
 		return nil, fmt.Errorf("marshal response: %w", err)
 	}
