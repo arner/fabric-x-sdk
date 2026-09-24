@@ -233,8 +233,8 @@ func TestParse_Events(t *testing.T) {
 	eventPayload := []byte(`{"type":"Transfer"}`)
 
 	tx := &applicationpb.Tx{
-		// [0]=event, [1]=payload (absent), [2]=arg count (zero)
-		Metadata: [][]byte{eventPayload, nil, {0}},
+		// [0]=event, [1]=event name, [2]=payload (absent), [3]=arg count (zero)
+		Metadata: [][]byte{eventPayload, []byte("Transfer"), nil, {0}},
 		Namespaces: []*applicationpb.TxNamespace{{
 			NsId: "ns",
 			BlindWrites: []*applicationpb.Write{
@@ -250,9 +250,11 @@ func TestParse_Events(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// event is raw bytes, no classic-Fabric ChaincodeEvent wrapper
-	if string(btx.Events) != string(eventPayload) {
-		t.Errorf("events: got %q, want %q", btx.Events, eventPayload)
+	if string(btx.Event) != string(eventPayload) {
+		t.Errorf("event: got %q, want %q", btx.Event, eventPayload)
+	}
+	if btx.EventName != "Transfer" {
+		t.Errorf("event name: got %q, want %q", btx.EventName, "Transfer")
 	}
 
 	// all writes should be in NsRWS (no synthetic writes to strip)
@@ -266,8 +268,8 @@ func TestParse_InputArgs(t *testing.T) {
 	txID := "txid-input"
 	args := [][]byte{[]byte("invoke"), []byte("arg1"), []byte("arg2")}
 
-	// [0]=event (absent), [1]=payload (absent), [2]=arg count, [3:]=args
-	metadata := append([][]byte{nil, nil, {byte(len(args))}}, args...)
+	// [0]=event, [1]=event name, [2]=payload (all absent), [3]=arg count, [4:]=args
+	metadata := append([][]byte{nil, nil, nil, {byte(len(args))}}, args...) //nolint:gosec // len(args) is 3.
 
 	tx := &applicationpb.Tx{
 		Metadata: metadata,
