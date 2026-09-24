@@ -38,12 +38,12 @@ func (e EndorsementBuilder) Endorse(in endorsement.Invocation, res endorsement.E
 	}
 
 	var event []byte
-	if len(res.Event) > 0 {
+	if name := res.EventNameOrDefault(); name != "" {
 		event, err = proto.Marshal(&peer.ChaincodeEvent{
 			Payload:     res.Event,
 			ChaincodeId: in.Namespace,
 			TxId:        in.TxID,
-			EventName:   "log",
+			EventName:   name,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("marshal events: %w", err)

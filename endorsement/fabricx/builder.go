@@ -35,13 +35,15 @@ type EndorsementBuilder struct {
 // Endorse generates a signed proposal response based on the invocation and execution result.
 // It follows the Fabric-X transaction and signature format, wrapped in a Fabric envelope.
 func (e EndorsementBuilder) Endorse(inv endorsement.Invocation, res endorsement.ExecutionResult) (*peer.ProposalResponse, error) {
-	if len(inv.Args) > maxArgs {
-		return nil, fmt.Errorf("too many args: %d exceeds the %d-arg metadata limit", len(inv.Args), maxArgs)
+	argCount := len(inv.Args)
+	if argCount > maxArgs {
+		return nil, fmt.Errorf("too many args: %d exceeds the %d-arg metadata limit", argCount, maxArgs)
 	}
 
-	// Metadata is positional: [0] = event, [1] = payload, [2] = arg count, [3:] = args. See DecodeMetadata.
-	metadata := make([][]byte, 0, 3+len(inv.Args))
-	metadata = append(metadata, res.Event, res.Payload, []byte{byte(len(inv.Args))})
+	// Metadata is positional: [0] = event, [1] = event name, [2] = payload, [3] = arg count,
+	// [4:] = args. See DecodeMetadata.
+	metadata := make([][]byte, 0, 4+argCount)
+	metadata = append(metadata, res.Event, []byte(res.EventNameOrDefault()), res.Payload, []byte{byte(argCount)})
 	metadata = append(metadata, inv.Args...)
 
 	tx := buildTx(res.RWS, inv.Namespace, inv.NsVersion, metadata)

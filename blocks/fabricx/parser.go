@@ -98,12 +98,13 @@ func (BlockParser) ParseTx(env *common.Envelope) (*blocks.Transaction, error) {
 		return nil, fmt.Errorf("transaction: %w", err)
 	}
 
-	events, payload, inputArgs := DecodeMetadata(ptx.Metadata)
+	md := DecodeMetadata(ptx.Metadata)
 	tx := &blocks.Transaction{
 		ID:        chdr.TxId,
-		InputArgs: inputArgs,
-		Events:    events,
-		Payload:   payload,
+		InputArgs: md.InputArgs,
+		Event:     md.Event,
+		EventName: md.EventName,
+		Payload:   md.Payload,
 		NsRWS:     DecodeNamespaces(ptx.Namespaces),
 	}
 

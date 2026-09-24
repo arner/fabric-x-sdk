@@ -11,23 +11,35 @@ import (
 	"github.com/hyperledger/fabric-x-sdk/blocks"
 )
 
-// DecodeMetadata extracts Events, Payload, and InputArgs from the transaction metadata.
-// The layout is purely positional: metadata[0] = event, metadata[1] = payload,
-// metadata[2] = arg count (1 byte), metadata[3:3+count] = args.
-func DecodeMetadata(metadata [][]byte) (events []byte, payload []byte, inputArgs [][]byte) {
+// Metadata is the SDK-defined content of a Fabric-X transaction's metadata.
+type Metadata struct {
+	Event     []byte
+	EventName string
+	Payload   []byte
+	InputArgs [][]byte
+}
+
+// DecodeMetadata extracts the event, event name, payload, and input args from the transaction metadata.
+// The layout is purely positional: metadata[0] = event, metadata[1] = event name,
+// metadata[2] = payload, metadata[3] = arg count (1 byte), metadata[4:4+count] = args.
+func DecodeMetadata(metadata [][]byte) Metadata {
+	var m Metadata
 	if len(metadata) > 0 {
-		events = metadata[0]
+		m.Event = metadata[0]
 	}
 	if len(metadata) > 1 {
-		payload = metadata[1]
+		m.EventName = string(metadata[1])
 	}
-	if len(metadata) > 2 && len(metadata[2]) > 0 {
-		count := int(metadata[2][0])
-		if end := 3 + count; end <= len(metadata) {
-			inputArgs = metadata[3:end]
+	if len(metadata) > 2 {
+		m.Payload = metadata[2]
+	}
+	if len(metadata) > 3 && len(metadata[3]) > 0 {
+		count := int(metadata[3][0])
+		if end := 4 + count; end <= len(metadata) {
+			m.InputArgs = metadata[4:end]
 		}
 	}
-	return events, payload, inputArgs
+	return m
 }
 
 // DecodeNamespaces converts Fabric-X TxNamespace protos into the SDK's

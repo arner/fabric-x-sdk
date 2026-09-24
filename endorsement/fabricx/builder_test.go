@@ -128,8 +128,8 @@ func TestEndorse_NsVersion(t *testing.T) {
 }
 
 // TestEndorse_MetadataFixedWidth ensures that the positions don't change.
-// [0]=event, [1]=payload, [2]=arg count, [3:]=args.
-// Metadata must always contain exactly 3+len(args) entries, regardless of
+// [0]=event, [1]=event name, [2]=payload, [3]=arg count, [4:]=args.
+// Metadata must always contain exactly 4+len(args) entries, regardless of
 // which fields are empty.
 func TestEndorse_MetadataFixedWidth(t *testing.T) {
 	in := endorsement.Invocation{
@@ -149,23 +149,27 @@ func TestEndorse_MetadataFixedWidth(t *testing.T) {
 	if err := proto.Unmarshal(resp.Payload, &tx); err != nil {
 		t.Fatalf("unmarshal Tx: %v", err)
 	}
-	if len(tx.Metadata) != 3 {
-		t.Fatalf("expected exactly 3 metadata entries, got %d", len(tx.Metadata))
+	if len(tx.Metadata) != 4 {
+		t.Fatalf("expected exactly 4 metadata entries, got %d", len(tx.Metadata))
 	}
 	if string(tx.Metadata[0]) != "myevent" {
 		t.Errorf("expected event %q at metadata[0], got %q", "myevent", tx.Metadata[0])
 	}
-	if string(tx.Metadata[1]) != "mypayload" {
-		t.Errorf("expected payload %q at metadata[1], got %q", "mypayload", tx.Metadata[1])
+	// no EventName set, so the default applies, matching the Fabric builder
+	if string(tx.Metadata[1]) != endorsement.DefaultEventName {
+		t.Errorf("expected event name %q at metadata[1], got %q", endorsement.DefaultEventName, tx.Metadata[1])
 	}
-	if len(tx.Metadata[2]) != 1 || tx.Metadata[2][0] != 0 {
-		t.Errorf("expected arg count 0 at metadata[2], got %v", tx.Metadata[2])
+	if string(tx.Metadata[2]) != "mypayload" {
+		t.Errorf("expected payload %q at metadata[2], got %q", "mypayload", tx.Metadata[2])
+	}
+	if len(tx.Metadata[3]) != 1 || tx.Metadata[3][0] != 0 {
+		t.Errorf("expected arg count 0 at metadata[3], got %v", tx.Metadata[3])
 	}
 }
 
 // TestEndorse_Args guards the count-byte positional layout for a non-empty
-// Args: metadata must carry the count at [2] followed by each arg unpacked,
-// one per entry, at [3:].
+// Args: metadata must carry the count at [3] followed by each arg unpacked,
+// one per entry, at [4:].
 func TestEndorse_Args(t *testing.T) {
 	in := endorsement.Invocation{
 		TxID:         "txid",
@@ -183,15 +187,18 @@ func TestEndorse_Args(t *testing.T) {
 	if err := proto.Unmarshal(resp.Payload, &tx); err != nil {
 		t.Fatalf("unmarshal Tx: %v", err)
 	}
-	if len(tx.Metadata) != 6 {
-		t.Fatalf("expected exactly 6 metadata entries (3 + 3 args), got %d", len(tx.Metadata))
+	if len(tx.Metadata) != 7 {
+		t.Fatalf("expected exactly 7 metadata entries (4 + 3 args), got %d", len(tx.Metadata))
 	}
-	if len(tx.Metadata[2]) != 1 || tx.Metadata[2][0] != 3 {
-		t.Fatalf("expected arg count 3 at metadata[2], got %v", tx.Metadata[2])
+	if len(tx.Metadata[1]) != 0 {
+		t.Errorf("expected no event name at metadata[1] without an event, got %q", tx.Metadata[1])
+	}
+	if len(tx.Metadata[3]) != 1 || tx.Metadata[3][0] != 3 {
+		t.Fatalf("expected arg count 3 at metadata[3], got %v", tx.Metadata[3])
 	}
 	for i, want := range in.Args {
-		if string(tx.Metadata[3+i]) != string(want) {
-			t.Errorf("arg %d: got %q, want %q", i, tx.Metadata[3+i], want)
+		if string(tx.Metadata[4+i]) != string(want) {
+			t.Errorf("arg %d: got %q, want %q", i, tx.Metadata[4+i], want)
 		}
 	}
 }
