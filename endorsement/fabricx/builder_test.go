@@ -8,10 +8,12 @@ package fabricx
 
 import (
 	"bytes"
+	"errors"
 	"testing"
 
 	"github.com/hyperledger/fabric-protos-go-apiv2/peer"
 	"github.com/hyperledger/fabric-x-common/api/applicationpb"
+	"github.com/hyperledger/fabric-x-sdk/api/metadatapb"
 	"github.com/hyperledger/fabric-x-sdk/blocks"
 	"github.com/hyperledger/fabric-x-sdk/endorsement"
 	"google.golang.org/protobuf/proto"
@@ -127,18 +129,16 @@ func TestEndorse_NsVersion(t *testing.T) {
 	}
 }
 
-// TestEndorse_MetadataFixedWidth ensures that the positions don't change.
-// [0]=event, [1]=event name, [2]=payload, [3]=arg count, [4:]=args.
-// Metadata must always contain exactly 4+len(args) entries, regardless of
-// which fields are empty.
-func TestEndorse_MetadataFixedWidth(t *testing.T) {
+// TestEndorse_Metadata guards the metadata layout: a single entry at
+// metadata[0] holding a metadatapb.Metadata with all SDK-defined fields.
+func TestEndorse_Metadata(t *testing.T) {
 	in := endorsement.Invocation{
 		TxID:         "txid",
 		ProposalHash: []byte("prophash"),
-		Args:         nil,
+		Args:         [][]byte{[]byte("a"), []byte("b"), []byte("c")},
 		Namespace:    testNamespace,
 	}
-	res := endorsement.ExecutionResult{Event: []byte("myevent"), Payload: []byte("mypayload")}
+	res := endorsement.ExecutionResult{Event: []byte("myevent"), EventName: "Transfer", Payload: []byte("mypayload")}
 
 	resp, err := NewEndorsementBuilder(fixedSigner{}).Endorse(in, res)
 	if err != nil {
@@ -149,77 +149,40 @@ func TestEndorse_MetadataFixedWidth(t *testing.T) {
 	if err := proto.Unmarshal(resp.Payload, &tx); err != nil {
 		t.Fatalf("unmarshal Tx: %v", err)
 	}
-	if len(tx.Metadata) != 4 {
-		t.Fatalf("expected exactly 4 metadata entries, got %d", len(tx.Metadata))
+	if len(tx.Metadata) != 1 {
+		t.Fatalf("expected exactly 1 metadata entry, got %d", len(tx.Metadata))
 	}
-	if string(tx.Metadata[0]) != "myevent" {
-		t.Errorf("expected event %q at metadata[0], got %q", "myevent", tx.Metadata[0])
+	var md metadatapb.Metadata
+	if err := proto.Unmarshal(tx.Metadata[0], &md); err != nil {
+		t.Fatalf("unmarshal metadata[0]: %v", err)
 	}
-	// no EventName set, so the default applies, matching the Fabric builder
-	if string(tx.Metadata[1]) != endorsement.DefaultEventName {
-		t.Errorf("expected event name %q at metadata[1], got %q", endorsement.DefaultEventName, tx.Metadata[1])
+	if string(md.Event) != "myevent" {
+		t.Errorf("event: got %q, want %q", md.Event, "myevent")
 	}
-	if string(tx.Metadata[2]) != "mypayload" {
-		t.Errorf("expected payload %q at metadata[2], got %q", "mypayload", tx.Metadata[2])
+	if md.EventName != "Transfer" {
+		t.Errorf("event name: got %q, want %q", md.EventName, "Transfer")
 	}
-	if len(tx.Metadata[3]) != 1 || tx.Metadata[3][0] != 0 {
-		t.Errorf("expected arg count 0 at metadata[3], got %v", tx.Metadata[3])
+	if string(md.Payload) != "mypayload" {
+		t.Errorf("payload: got %q, want %q", md.Payload, "mypayload")
 	}
-}
-
-// TestEndorse_Args guards the count-byte positional layout for a non-empty
-// Args: metadata must carry the count at [3] followed by each arg unpacked,
-// one per entry, at [4:].
-func TestEndorse_Args(t *testing.T) {
-	in := endorsement.Invocation{
-		TxID:         "txid",
-		ProposalHash: []byte("prophash"),
-		Args:         [][]byte{[]byte("a"), []byte("b"), []byte("c")},
-		Namespace:    testNamespace,
-	}
-
-	resp, err := NewEndorsementBuilder(fixedSigner{}).Endorse(in, endorsement.ExecutionResult{})
-	if err != nil {
-		t.Fatalf("Endorse failed: %v", err)
-	}
-
-	var tx applicationpb.Tx
-	if err := proto.Unmarshal(resp.Payload, &tx); err != nil {
-		t.Fatalf("unmarshal Tx: %v", err)
-	}
-	if len(tx.Metadata) != 7 {
-		t.Fatalf("expected exactly 7 metadata entries (4 + 3 args), got %d", len(tx.Metadata))
-	}
-	if len(tx.Metadata[1]) != 0 {
-		t.Errorf("expected no event name at metadata[1] without an event, got %q", tx.Metadata[1])
-	}
-	if len(tx.Metadata[3]) != 1 || tx.Metadata[3][0] != 3 {
-		t.Fatalf("expected arg count 3 at metadata[3], got %v", tx.Metadata[3])
+	if len(md.InputArgs) != len(in.Args) {
+		t.Fatalf("args len: got %d, want %d", len(md.InputArgs), len(in.Args))
 	}
 	for i, want := range in.Args {
-		if string(tx.Metadata[4+i]) != string(want) {
-			t.Errorf("arg %d: got %q, want %q", i, tx.Metadata[4+i], want)
+		if string(md.InputArgs[i]) != string(want) {
+			t.Errorf("arg %d: got %q, want %q", i, md.InputArgs[i], want)
 		}
 	}
 }
 
-// TestEndorse_TooManyArgs guards the 255-entry ceiling the count byte can
-// express: Endorse must error rather than silently truncate.
-func TestEndorse_TooManyArgs(t *testing.T) {
-	args := make([][]byte, 256)
-	for i := range args {
-		args[i] = []byte("x")
-	}
-	in := endorsement.Invocation{
-		TxID:         "txid",
-		ProposalHash: []byte("prophash"),
-		Args:         args,
-		Namespace:    testNamespace,
-	}
+// TestEndorse_MissingEventName ensures an event without a name is rejected.
+func TestEndorse_MissingEventName(t *testing.T) {
+	in := endorsement.Invocation{TxID: "txid", Namespace: testNamespace}
+	res := endorsement.ExecutionResult{Event: []byte("myevent")}
 
-	_, err := NewEndorsementBuilder(fixedSigner{}).Endorse(in, endorsement.ExecutionResult{})
-	if err == nil {
-		t.Fatal("expected an error for more than 255 args, got nil")
+	_, err := NewEndorsementBuilder(fixedSigner{}).Endorse(in, res)
+	if !errors.Is(err, endorsement.ErrMissingEventName) {
+		t.Fatalf("expected ErrMissingEventName, got %v", err)
 	}
 }
 

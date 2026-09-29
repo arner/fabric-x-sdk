@@ -13,6 +13,7 @@ SPDX-License-Identifier: Apache-2.0
 package endorsement
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/hyperledger/fabric-protos-go-apiv2/peer"
@@ -54,8 +55,7 @@ type ExecutionResult struct {
 	RWS blocks.ReadWriteSet
 	// Event is an optional opaque payload that was emitted as a chaincode event.
 	Event []byte
-	// EventName is the name of the event. It defaults to DefaultEventName when
-	// Event is set and EventName is empty.
+	// EventName is the name of the event. It is required when Event is set.
 	EventName string
 	// Status is a code that should follow the HTTP status codes.
 	Status int32
@@ -65,19 +65,15 @@ type ExecutionResult struct {
 	Payload []byte
 }
 
-// DefaultEventName is the event name used when an ExecutionResult has an Event but no EventName.
-const DefaultEventName = "event"
+// ErrMissingEventName is returned when an ExecutionResult has an Event but no EventName.
+var ErrMissingEventName = errors.New("event name is required when an event is set")
 
-// EventNameOrDefault returns EventName, DefaultEventName if Event is set without a name,
-// or "" if there is no event at all.
-func (res ExecutionResult) EventNameOrDefault() string {
-	if res.EventName != "" {
-		return res.EventName
+// Validate reports whether the ExecutionResult can be endorsed.
+func (res ExecutionResult) Validate() error {
+	if len(res.Event) > 0 && res.EventName == "" {
+		return ErrMissingEventName
 	}
-	if len(res.Event) > 0 {
-		return DefaultEventName
-	}
-	return ""
+	return nil
 }
 
 func (res ExecutionResult) Response() *peer.Response {
@@ -99,12 +95,14 @@ func BadRequest(msg string) ExecutionResult {
 }
 
 // Success returns a 200 ExecutionResult with the given read-write set, event, and response payload.
-func Success(rws blocks.ReadWriteSet, event []byte, payload []byte) ExecutionResult {
+// eventName is required when event is set.
+func Success(rws blocks.ReadWriteSet, eventName string, event []byte, payload []byte) ExecutionResult {
 	return ExecutionResult{
-		RWS:     rws,
-		Event:   event,
-		Status:  200,
-		Message: "OK",
-		Payload: payload,
+		RWS:       rws,
+		Event:     event,
+		EventName: eventName,
+		Status:    200,
+		Message:   "OK",
+		Payload:   payload,
 	}
 }

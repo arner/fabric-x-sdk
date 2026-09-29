@@ -32,18 +32,21 @@ type EndorsementBuilder struct {
 
 // Endorse generates a signed proposal response based on the invocation and execution result.
 func (e EndorsementBuilder) Endorse(in endorsement.Invocation, res endorsement.ExecutionResult) (*peer.ProposalResponse, error) {
+	if err := res.Validate(); err != nil {
+		return nil, err
+	}
 	simResBytes, err := marshalRWSet(&res.RWS, in.Namespace)
 	if err != nil {
 		return nil, fmt.Errorf("marshal rwset: %w", err)
 	}
 
 	var event []byte
-	if name := res.EventNameOrDefault(); name != "" {
+	if res.EventName != "" {
 		event, err = proto.Marshal(&peer.ChaincodeEvent{
 			Payload:     res.Event,
 			ChaincodeId: in.Namespace,
 			TxId:        in.TxID,
-			EventName:   name,
+			EventName:   res.EventName,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("marshal events: %w", err)

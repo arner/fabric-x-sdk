@@ -337,7 +337,7 @@ func testAddLog(t *testing.T, s *testSetup) {
 	inv := s.newInvocation(t, [][]byte{[]byte("invoke")})
 	var responses []*peer.ProposalResponse
 	for _, b := range s.builders {
-		resp, err := b.Endorse(inv, endorsement.Success(sim.Result(), eventBytes, nil))
+		resp, err := b.Endorse(inv, endorsement.Success(sim.Result(), "log", eventBytes, nil))
 		if err != nil {
 			t.Fatalf("Endorse: %v", err)
 		}
@@ -357,7 +357,7 @@ func testEndorsementClientExecuteTransaction(t *testing.T, s *testSetup) {
 		result: func(_ endorsement.Invocation) endorsement.ExecutionResult {
 			return endorsement.Success(blocks.ReadWriteSet{
 				Writes: []blocks.KVWrite{{Key: key, Value: []byte("v_ec")}},
-			}, nil, nil)
+			}, "", nil, nil)
 		},
 	}
 
@@ -402,8 +402,7 @@ func testInputArgsAndEvents(t *testing.T, s *testSetup) {
 	for _, b := range s.builders {
 		res := endorsement.Success(blocks.ReadWriteSet{
 			Writes: []blocks.KVWrite{{Key: key, Value: []byte("v")}},
-		}, eventPayload, responsePayload)
-		res.EventName = eventName
+		}, eventName, eventPayload, responsePayload)
 		resp, err := b.Endorse(inv, res)
 		if err != nil {
 			t.Fatalf("Endorse: %v", err)
@@ -443,7 +442,7 @@ func testInputArgsAndEvents(t *testing.T, s *testSetup) {
 	}
 
 	// payload: the generic ExecutionResult.Payload channel, committed on both
-	// backends (ChaincodeAction.Response.Payload on Fabric, metadata[2] on Fabric-X).
+	// backends (ChaincodeAction.Response.Payload on Fabric, metadata[0] on Fabric-X).
 	if string(tx.Payload) != string(responsePayload) {
 		t.Errorf("payload: got %q, want %q", tx.Payload, responsePayload)
 	}
@@ -462,7 +461,7 @@ func testNotifications(t *testing.T, s *testSetup) {
 	for _, b := range s.builders {
 		resp, err := b.Endorse(inv, endorsement.Success(blocks.ReadWriteSet{
 			Writes: []blocks.KVWrite{{Key: key, Value: []byte("notified")}},
-		}, nil, nil))
+		}, "", nil, nil))
 		if err != nil {
 			t.Fatalf("Endorse: %v", err)
 		}
@@ -538,7 +537,7 @@ func testStreamAllTransactions(t *testing.T, s *testSetup) {
 	for _, b := range s.builders {
 		resp, err := b.Endorse(inv, endorsement.Success(blocks.ReadWriteSet{
 			Writes: []blocks.KVWrite{{Key: key, Value: []byte("streamed")}},
-		}, nil, nil))
+		}, "", nil, nil))
 		if err != nil {
 			t.Fatalf("Endorse: %v", err)
 		}

@@ -8,77 +8,95 @@ package fabricx
 
 import (
 	"testing"
+
+	"github.com/hyperledger/fabric-x-sdk/api/metadatapb"
+	"google.golang.org/protobuf/proto"
 )
 
-func TestDecodeMetadata(t *testing.T) {
+func TestMetadataRoundTrip(t *testing.T) {
 	tests := []struct {
-		name          string
-		metadata      [][]byte
-		wantEvent     []byte
-		wantEventName string
-		wantPayload   []byte
-		wantArgs      [][]byte
+		name string
+		md   Metadata
 	}{
+		{name: "empty"},
 		{
-			name:     "nil metadata",
-			metadata: nil,
+			name: "event, name and payload only",
+			md:   Metadata{Event: []byte("evt"), EventName: "Transfer", Payload: []byte("payload")},
 		},
 		{
-			name:     "all absent, zero args",
-			metadata: [][]byte{nil, nil, nil, {0}},
+			name: "args only",
+			md:   Metadata{InputArgs: [][]byte{[]byte("a"), []byte("b"), []byte("c")}},
 		},
 		{
-			name:          "event, name and payload only, zero args",
-			metadata:      [][]byte{[]byte("evt"), []byte("Transfer"), []byte("payload"), {0}},
-			wantEvent:     []byte("evt"),
-			wantEventName: "Transfer",
-			wantPayload:   []byte("payload"),
-		},
-		{
-			name:     "one arg",
-			metadata: [][]byte{nil, nil, nil, {1}, []byte("a")},
-			wantArgs: [][]byte{[]byte("a")},
-		},
-		{
-			name:     "many args",
-			metadata: [][]byte{nil, nil, nil, {3}, []byte("a"), []byte("b"), []byte("c")},
-			wantArgs: [][]byte{[]byte("a"), []byte("b"), []byte("c")},
-		},
-		{
-			name:          "mixed: event, name, payload, and args all present",
-			metadata:      [][]byte{[]byte("evt"), []byte("log"), []byte("payload"), {2}, []byte("x"), []byte("y")},
-			wantEvent:     []byte("evt"),
-			wantEventName: "log",
-			wantPayload:   []byte("payload"),
-			wantArgs:      [][]byte{[]byte("x"), []byte("y")},
-		},
-		{
-			name:     "count present but args truncated",
-			metadata: [][]byte{nil, nil, nil, {2}, []byte("only-one")},
-			wantArgs: nil,
+			name: "all present, including an empty arg",
+			md: Metadata{
+				Event:     []byte("evt"),
+				EventName: "log",
+				Payload:   []byte("payload"),
+				InputArgs: [][]byte{[]byte("x"), {}, []byte("y")},
+			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			md := DecodeMetadata(tt.metadata)
-			if string(md.Event) != string(tt.wantEvent) {
-				t.Errorf("event: got %q, want %q", md.Event, tt.wantEvent)
+			enc, err := EncodeMetadata(tt.md)
+			if err != nil {
+				t.Fatalf("EncodeMetadata: %v", err)
 			}
-			if md.EventName != tt.wantEventName {
-				t.Errorf("event name: got %q, want %q", md.EventName, tt.wantEventName)
+			if len(enc) != 1 {
+				t.Fatalf("expected 1 metadata entry, got %d", len(enc))
 			}
-			if string(md.Payload) != string(tt.wantPayload) {
-				t.Errorf("payload: got %q, want %q", md.Payload, tt.wantPayload)
-			}
-			if len(md.InputArgs) != len(tt.wantArgs) {
-				t.Fatalf("args len: got %d, want %d", len(md.InputArgs), len(tt.wantArgs))
-			}
-			for i, want := range tt.wantArgs {
-				if string(md.InputArgs[i]) != string(want) {
-					t.Errorf("args[%d]: got %q, want %q", i, md.InputArgs[i], want)
-				}
-			}
+			assertMetadata(t, DecodeMetadata(enc), tt.md)
 		})
+	}
+}
+
+func TestDecodeMetadata(t *testing.T) {
+	sdkMD, err := proto.Marshal(&metadatapb.Metadata{Event: []byte("evt"), EventName: "Transfer"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name     string
+		metadata [][]byte
+		want     Metadata
+	}{
+		{name: "nil metadata", metadata: nil},
+		{name: "empty first entry", metadata: [][]byte{nil}},
+		{name: "undecodable first entry", metadata: [][]byte{{0xff, 0xff}}},
+		{
+			name:     "later entries are ignored",
+			metadata: [][]byte{sdkMD, []byte("other consumer")},
+			want:     Metadata{Event: []byte("evt"), EventName: "Transfer"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assertMetadata(t, DecodeMetadata(tt.metadata), tt.want)
+		})
+	}
+}
+
+func assertMetadata(t *testing.T, got, want Metadata) {
+	t.Helper()
+	if string(got.Event) != string(want.Event) {
+		t.Errorf("event: got %q, want %q", got.Event, want.Event)
+	}
+	if got.EventName != want.EventName {
+		t.Errorf("event name: got %q, want %q", got.EventName, want.EventName)
+	}
+	if string(got.Payload) != string(want.Payload) {
+		t.Errorf("payload: got %q, want %q", got.Payload, want.Payload)
+	}
+	if len(got.InputArgs) != len(want.InputArgs) {
+		t.Fatalf("args len: got %d, want %d", len(got.InputArgs), len(want.InputArgs))
+	}
+	for i := range want.InputArgs {
+		if string(got.InputArgs[i]) != string(want.InputArgs[i]) {
+			t.Errorf("args[%d]: got %q, want %q", i, got.InputArgs[i], want.InputArgs[i])
+		}
 	}
 }

@@ -16,6 +16,15 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+func mustEncodeMetadata(t *testing.T, m Metadata) [][]byte {
+	t.Helper()
+	md, err := EncodeMetadata(m)
+	if err != nil {
+		t.Fatalf("EncodeMetadata: %v", err)
+	}
+	return md
+}
+
 // buildEnvelope constructs a minimal Envelope whose payload contains a
 // applicationpb.Tx with the given namespaces.
 func buildEnvelope(t *testing.T, txID string, tx *applicationpb.Tx) *common.Envelope {
@@ -233,8 +242,7 @@ func TestParse_Events(t *testing.T) {
 	eventPayload := []byte(`{"type":"Transfer"}`)
 
 	tx := &applicationpb.Tx{
-		// [0]=event, [1]=event name, [2]=payload (absent), [3]=arg count (zero)
-		Metadata: [][]byte{eventPayload, []byte("Transfer"), nil, {0}},
+		Metadata: mustEncodeMetadata(t, Metadata{Event: eventPayload, EventName: "Transfer"}),
 		Namespaces: []*applicationpb.TxNamespace{{
 			NsId: "ns",
 			BlindWrites: []*applicationpb.Write{
@@ -268,11 +276,8 @@ func TestParse_InputArgs(t *testing.T) {
 	txID := "txid-input"
 	args := [][]byte{[]byte("invoke"), []byte("arg1"), []byte("arg2")}
 
-	// [0]=event, [1]=event name, [2]=payload (all absent), [3]=arg count, [4:]=args
-	metadata := append([][]byte{nil, nil, nil, {byte(len(args))}}, args...) //nolint:gosec // len(args) is 3.
-
 	tx := &applicationpb.Tx{
-		Metadata: metadata,
+		Metadata: mustEncodeMetadata(t, Metadata{InputArgs: args}),
 		Namespaces: []*applicationpb.TxNamespace{{
 			NsId: "ns",
 			BlindWrites: []*applicationpb.Write{

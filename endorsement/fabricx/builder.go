@@ -15,12 +15,10 @@ import (
 	"github.com/hyperledger/fabric-x-common/api/applicationpb"
 	sdk "github.com/hyperledger/fabric-x-sdk"
 	"github.com/hyperledger/fabric-x-sdk/blocks"
+	"github.com/hyperledger/fabric-x-sdk/blocks/fabricx"
 	"github.com/hyperledger/fabric-x-sdk/endorsement"
 	"google.golang.org/protobuf/proto"
 )
-
-// maxArgs is the largest arg count the single count byte in metadata can express.
-const maxArgs = 255
 
 // NewEndorsementBuilder returns an EndorsementBuilder that produces Fabric-X-format signed responses.
 func NewEndorsementBuilder(signer sdk.Signer) EndorsementBuilder {
@@ -35,16 +33,18 @@ type EndorsementBuilder struct {
 // Endorse generates a signed proposal response based on the invocation and execution result.
 // It follows the Fabric-X transaction and signature format, wrapped in a Fabric envelope.
 func (e EndorsementBuilder) Endorse(inv endorsement.Invocation, res endorsement.ExecutionResult) (*peer.ProposalResponse, error) {
-	argCount := len(inv.Args)
-	if argCount > maxArgs {
-		return nil, fmt.Errorf("too many args: %d exceeds the %d-arg metadata limit", argCount, maxArgs)
+	if err := res.Validate(); err != nil {
+		return nil, err
 	}
-
-	// Metadata is positional: [0] = event, [1] = event name, [2] = payload, [3] = arg count,
-	// [4:] = args. See DecodeMetadata.
-	metadata := make([][]byte, 0, 4+argCount)
-	metadata = append(metadata, res.Event, []byte(res.EventNameOrDefault()), res.Payload, []byte{byte(argCount)})
-	metadata = append(metadata, inv.Args...)
+	metadata, err := fabricx.EncodeMetadata(fabricx.Metadata{
+		InputArgs: inv.Args,
+		Event:     res.Event,
+		EventName: res.EventName,
+		Payload:   res.Payload,
+	})
+	if err != nil {
+		return nil, err
+	}
 
 	tx := buildTx(res.RWS, inv.Namespace, inv.NsVersion, metadata)
 	prpBytes, err := proto.Marshal(tx)

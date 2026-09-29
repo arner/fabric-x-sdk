@@ -7,8 +7,12 @@ SPDX-License-Identifier: Apache-2.0
 package fabricx
 
 import (
+	"fmt"
+
 	"github.com/hyperledger/fabric-x-common/api/applicationpb"
+	"github.com/hyperledger/fabric-x-sdk/api/metadatapb"
 	"github.com/hyperledger/fabric-x-sdk/blocks"
+	"google.golang.org/protobuf/proto"
 )
 
 // Metadata is the SDK-defined content of a Fabric-X transaction's metadata.
@@ -19,27 +23,41 @@ type Metadata struct {
 	InputArgs [][]byte
 }
 
-// DecodeMetadata extracts the event, event name, payload, and input args from the transaction metadata.
-// The layout is purely positional: metadata[0] = event, metadata[1] = event name,
-// metadata[2] = payload, metadata[3] = arg count (1 byte), metadata[4:4+count] = args.
+// EncodeMetadata marshals m into the transaction metadata. The SDK owns
+// metadata[0], which holds a metadatapb.Metadata; later entries are free for
+// other consumers. Marshaling is deterministic because every endorser of a
+// transaction has to produce the same bytes.
+func EncodeMetadata(m Metadata) ([][]byte, error) {
+	b, err := proto.MarshalOptions{Deterministic: true}.Marshal(&metadatapb.Metadata{
+		InputArgs: m.InputArgs,
+		Event:     m.Event,
+		EventName: m.EventName,
+		Payload:   m.Payload,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("marshal metadata: %w", err)
+	}
+	return [][]byte{b}, nil
+}
+
+// DecodeMetadata extracts the event, event name, payload, and input args from
+// metadata[0] of the transaction metadata (see EncodeMetadata). Missing or
+// undecodable metadata yields an empty Metadata, since transactions not
+// created by the SDK need not carry it.
 func DecodeMetadata(metadata [][]byte) Metadata {
-	var m Metadata
-	if len(metadata) > 0 {
-		m.Event = metadata[0]
+	if len(metadata) == 0 {
+		return Metadata{}
 	}
-	if len(metadata) > 1 {
-		m.EventName = string(metadata[1])
+	var pm metadatapb.Metadata
+	if err := proto.Unmarshal(metadata[0], &pm); err != nil {
+		return Metadata{}
 	}
-	if len(metadata) > 2 {
-		m.Payload = metadata[2]
+	return Metadata{
+		Event:     pm.Event,
+		EventName: pm.EventName,
+		Payload:   pm.Payload,
+		InputArgs: pm.InputArgs,
 	}
-	if len(metadata) > 3 && len(metadata[3]) > 0 {
-		count := int(metadata[3][0])
-		if end := 4 + count; end <= len(metadata) {
-			m.InputArgs = metadata[4:end]
-		}
-	}
-	return m
 }
 
 // DecodeNamespaces converts Fabric-X TxNamespace protos into the SDK's
